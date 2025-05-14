@@ -1,270 +1,185 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { 
-  Search, 
-  Filter, 
-  Tag, 
-  TrendingUp, 
-  Bookmark, 
-  Heart, 
-  X,
-  FileText,
-  RefreshCw 
-} from "lucide-react";
-import { toast } from "sonner";
-import articleService, { Article } from "@/services/articleService";
-import ArticleCard from "@/components/articles/ArticleCard";
-import { cn } from "@/lib/utils";
+import React, { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Search, Filter, Tag, FileText, RefreshCw, X } from 'lucide-react';
+import { toast } from 'sonner';
+import articleService, { Article } from '@/services/articleService';
+import ArticleCard from '@/components/articles/ArticleCard';
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 
 export default function ArticlesPage() {
+  const { user } = useAuth();
+  const isContentWriter = user?.roles?.includes('writer');
   const [articles, setArticles] = useState<Article[]>([]);
-  const [trendingArticles, setTrendingArticles] = useState<Article[]>([]);
-  const [likedArticles, setLikedArticles] = useState<Article[]>([]);
-  const [bookmarkedArticles, setBookmarkedArticles] = useState<Article[]>([]);
-  const [likedArticleIds, setLikedArticleIds] = useState<number[]>([]);
-  const [bookmarkedArticleIds, setBookmarkedArticleIds] = useState<number[]>([]);
-  
+  const [myArticles, setMyArticles] = useState<Article[]>([]);
   const [filteredArticles, setFilteredArticles] = useState<Article[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
-  
   const [isLoading, setIsLoading] = useState(true);
-  const [isLikesLoading, setIsLikesLoading] = useState(true);
-  const [isBookmarksLoading, setIsBookmarksLoading] = useState(true);
-  const [isTrendingLoading, setIsTrendingLoading] = useState(true);
-  
-  const [activeTab, setActiveTab] = useState("all");
+  const [isMyArticlesLoading, setIsMyArticlesLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('all');
 
-  // Load all required data
   const loadData = useCallback(async () => {
     setIsLoading(true);
-    setIsTrendingLoading(true);
-    setIsLikesLoading(true);
-    setIsBookmarksLoading(true);
-    
+    setIsMyArticlesLoading(true);
+
     try {
       // Load published articles
       const articlesData = await articleService.getPublishedArticles();
-      setArticles(articlesData);
-      setFilteredArticles(articlesData);
       
-      // Extract tags
-      const tags = articlesData.flatMap(article => article.tags || []);
-      setAllTags([...new Set(tags)]);
-      
-      // Load trending articles
-      try {
-        const trendingData = await articleService.getTrendingArticles();
-        setTrendingArticles(trendingData);
-      } catch (error) {
-        console.error("Failed to load trending articles:", error);
-      } finally {
-        setIsTrendingLoading(false);
+      if (!Array.isArray(articlesData)) {
+        console.error('Articles data is not an array:', articlesData);
+        toast.error('Failed to load articles: Invalid data format');
+        setArticles([]);
+        setFilteredArticles([]);
+        setAllTags([]);
+      } else {
+        setArticles(articlesData);
+        setFilteredArticles(articlesData);
+
+        // Extract tags
+        const tags = articlesData.flatMap((article) => (article.tags || []));
+        setAllTags([...new Set(tags)]);
       }
-      
-      // Load liked articles
-      try {
-        const likesData = await articleService.getLikedArticles();
-        const likedIds = likesData.map(item => item.article);
-        setLikedArticleIds(likedIds);
-        
-        // Find the full article objects that are liked
-        const likedArticleObjects = articlesData.filter(article => 
-          likedIds.includes(article.id)
-        );
-        setLikedArticles(likedArticleObjects);
-      } catch (error) {
-        console.error("Failed to load liked articles:", error);
-      } finally {
-        setIsLikesLoading(false);
+
+      // Load my articles (for content writers)
+      if (isContentWriter) {
+        try {
+          const myArticlesData = await articleService.getPublishedArticles();
+          if (Array.isArray(myArticlesData)) {
+            setMyArticles(
+              myArticlesData.filter((article) => article.author === user?.username)
+            );
+          } else {
+            console.error('My articles data is not an array:', myArticlesData);
+            toast.error('Failed to load my articles');
+            setMyArticles([]);
+          }
+        } catch (error: any) {
+          console.error('Failed to load my articles:', error);
+          toast.error('Failed to load my articles');
+          setMyArticles([]);
+        } finally {
+          setIsMyArticlesLoading(false);
+        }
+      } else {
+        setIsMyArticlesLoading(false);
       }
-      
-      // Load bookmarked articles
-      try {
-        const bookmarksData = await articleService.getBookmarkedArticles();
-        const bookmarkedIds = bookmarksData.map(item => item.article);
-        setBookmarkedArticleIds(bookmarkedIds);
-        
-        // Find the full article objects that are bookmarked
-        const bookmarkedArticleObjects = articlesData.filter(article => 
-          bookmarkedIds.includes(article.id)
-        );
-        setBookmarkedArticles(bookmarkedArticleObjects);
-      } catch (error) {
-        console.error("Failed to load bookmarked articles:", error);
-      } finally {
-        setIsBookmarksLoading(false);
-      }
-      
-    } catch (error) {
-      console.error("Failed to load articles:", error);
-      toast.error("Failed to load articles");
+    } catch (error: any) {
+      console.error('Failed to load articles:', error);
+      toast.error('Failed to load articles');
+      setArticles([]);
+      setFilteredArticles([]);
+      setAllTags([]);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isContentWriter, user?.username]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Filter articles when search term or selected tags change
   useEffect(() => {
     let filtered = articles;
-    
-    // Apply search filter
+
     if (searchTerm) {
-      filtered = filtered.filter(article => 
-        article.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        article.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (article.tags && article.tags.some(tag => 
-          tag.toLowerCase().includes(searchTerm.toLowerCase())
-        ))
+      filtered = filtered.filter(
+        (article) =>
+          article.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          article.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (article.tags &&
+            article.tags.some((tag) =>
+              tag.toLowerCase().includes(searchTerm.toLowerCase())
+            ))
       );
     }
-    
-    // Apply tag filters
+
     if (selectedTags.length > 0) {
-      filtered = filtered.filter(article => 
-        selectedTags.every(tag => article.tags && article.tags.includes(tag))
+      filtered = filtered.filter(
+        (article) =>
+          article.tags &&
+          selectedTags.every((tag) => article.tags.includes(tag))
       );
     }
-    
+
     setFilteredArticles(filtered);
   }, [searchTerm, selectedTags, articles]);
 
   const handleTagSelect = (tag: string) => {
-    setSelectedTags(prev => 
-      prev.includes(tag) 
-        ? prev.filter(t => t !== tag) 
-        : [...prev, tag]
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
 
   const clearFilters = () => {
-    setSearchTerm("");
+    setSearchTerm('');
     setSelectedTags([]);
+  };
+
+  const handleRequestPublish = (slug: string) => {
+    setMyArticles((prev) =>
+      prev.map((article) =>
+        article.slug === slug ? { ...article, is_pending_publish: true } : article
+      )
+    );
   };
 
   const getTabContent = () => {
     switch (activeTab) {
-      case "trending":
+      case 'my-articles':
         return (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {isTrendingLoading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <ArticleCardSkeleton key={i} />
-              ))
-            ) : trendingArticles.length > 0 ? (
-              trendingArticles.map(article => (
+            {isMyArticlesLoading ? (
+              Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)
+            ) : myArticles.length > 0 ? (
+              myArticles.map((article) => (
                 <Link to={`/articles/${article.slug}`} key={article.id} className="group">
                   <ArticleCard
                     article={article}
-                    isBookmarked={bookmarkedArticleIds.includes(article.id)}
-                    isLiked={likedArticleIds.includes(article.id)}
-                    setBookmarkedArticles={setBookmarkedArticleIds}
-                    setLikedArticles={setLikedArticleIds}
+                    isBookmarked={false} // No bookmark functionality
+                    isLiked={false} // No like functionality
+                    setBookmarkedArticles={() => {}} // Empty function
+                    setLikedArticles={() => {}} // Empty function
+                    onRequestPublish={handleRequestPublish}
                   />
                 </Link>
               ))
             ) : (
               <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
-                <TrendingUp className="h-16 w-16 text-muted-foreground mb-4" />
-                <h3 className="text-xl font-medium">No trending articles</h3>
+                <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                <h3 className="text-xl font-medium">No articles yet</h3>
                 <p className="text-muted-foreground mt-2 max-w-md">
-                  Check back later for trending content. We're constantly updating our articles!
+                  Start writing your first article to share with the community!
                 </p>
+                <Button asChild className="mt-4">
+                  <Link to="/writer/articles/create">Write an Article</Link>
+                </Button>
               </div>
             )}
           </div>
         );
-        
-      case "liked":
-        return (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {isLikesLoading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <ArticleCardSkeleton key={i} />
-              ))
-            ) : likedArticles.length > 0 ? (
-              likedArticles.map(article => (
-                <Link to={`/articles/${article.slug}`} key={article.id} className="group">
-                  <ArticleCard
-                    article={article}
-                    isBookmarked={bookmarkedArticleIds.includes(article.id)}
-                    isLiked={true}
-                    setBookmarkedArticles={setBookmarkedArticleIds}
-                    setLikedArticles={setLikedArticleIds}
-                  />
-                </Link>
-              ))
-            ) : (
-              <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
-                <Heart className="h-16 w-16 text-muted-foreground mb-4" />
-                <h3 className="text-xl font-medium">No liked articles</h3>
-                <p className="text-muted-foreground mt-2 max-w-md">
-                  You haven't liked any articles yet. Browse our collection and like the ones you enjoy!
-                </p>
-              </div>
-            )}
-          </div>
-        );
-        
-      case "bookmarked":
-        return (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {isBookmarksLoading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <ArticleCardSkeleton key={i} />
-              ))
-            ) : bookmarkedArticles.length > 0 ? (
-              bookmarkedArticles.map(article => (
-                <Link to={`/articles/${article.slug}`} key={article.id} className="group">
-                  <ArticleCard
-                    article={article}
-                    isBookmarked={true}
-                    isLiked={likedArticleIds.includes(article.id)}
-                    setBookmarkedArticles={setBookmarkedArticleIds}
-                    setLikedArticles={setLikedArticleIds}
-                  />
-                </Link>
-              ))
-            ) : (
-              <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
-                <Bookmark className="h-16 w-16 text-muted-foreground mb-4" />
-                <h3 className="text-xl font-medium">No bookmarked articles</h3>
-                <p className="text-muted-foreground mt-2 max-w-md">
-                  You haven't bookmarked any articles yet. Bookmark articles to read them later!
-                </p>
-              </div>
-            )}
-          </div>
-        );
-        
-      default: // "all" tab
+      default: // 'all' tab
         return (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {isLoading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <ArticleCardSkeleton key={i} />
-              ))
+              Array.from({ length: 6 }).map((_, i) => <ArticleCardSkeleton key={i} />)
             ) : filteredArticles.length > 0 ? (
-              filteredArticles.map(article => (
+              filteredArticles.map((article) => (
                 <Link to={`/articles/${article.slug}`} key={article.id} className="group">
                   <ArticleCard
                     article={article}
-                    isBookmarked={bookmarkedArticleIds.includes(article.id)}
-                    isLiked={likedArticleIds.includes(article.id)}
-                    setBookmarkedArticles={setBookmarkedArticleIds}
-                    setLikedArticles={setLikedArticleIds}
+                    isBookmarked={false} // No bookmark functionality
+                    isLiked={false} // No like functionality
+                    setBookmarkedArticles={() => {}} // Empty function
+                    setLikedArticles={() => {}} // Empty function
                   />
                 </Link>
               ))
@@ -287,25 +202,28 @@ export default function ArticlesPage() {
     <div className="container mx-auto px-4 py-8 max-w-7xl">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-50">Articles</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-50">
+            Articles
+          </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
             Discover interesting content from our writers
           </p>
         </div>
-        
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="self-end md:self-auto"
-          onClick={loadData}
-        >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex gap-4">
+          {isContentWriter && (
+            <Button asChild>
+              <Link to="/writer/articles/create">Write an Article</Link>
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={loadData}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
-      
+
       <div className="mb-8">
-        <Card className="border-purple-100 dark:border-purple-900/30">
+        <Card className="border-indigo-100 dark:border-indigo-900/30">
           <CardContent className="p-4">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="relative flex-grow">
@@ -317,26 +235,26 @@ export default function ArticlesPage() {
                   className="pl-9 w-full"
                 />
                 {searchTerm && (
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
                     onClick={() => setSearchTerm('')}
                   >
                     <X className="h-4 w-4" />
                   </Button>
                 )}
               </div>
-              
+
               <div className="flex gap-2 items-center">
                 <Filter className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium hidden sm:inline">Filters:</span>
                 <div className="flex flex-wrap gap-2 items-center">
                   {selectedTags.length > 0 && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={clearFilters} 
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearFilters}
                       className="h-8 text-xs gap-1"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -346,8 +264,7 @@ export default function ArticlesPage() {
                 </div>
               </div>
             </div>
-            
-            {/* Tags section */}
+
             {allTags.length > 0 && (
               <div className="mt-4">
                 <div className="flex flex-wrap gap-2 items-center">
@@ -356,14 +273,14 @@ export default function ArticlesPage() {
                     Topics:
                   </span>
                   {allTags.slice(0, 10).map((tag, index) => (
-                    <Badge 
+                    <Badge
                       key={index}
-                      variant={selectedTags.includes(tag) ? "default" : "outline"}
+                      variant={selectedTags.includes(tag) ? 'default' : 'outline'}
                       className={cn(
-                        "cursor-pointer",
-                        selectedTags.includes(tag) 
-                          ? "bg-purple-600 hover:bg-purple-700" 
-                          : "bg-transparent text-gray-700 hover:bg-purple-100 dark:text-gray-300 dark:hover:bg-purple-900/30"
+                        'cursor-pointer',
+                        selectedTags.includes(tag)
+                          ? 'bg-indigo-600 hover:bg-indigo-700'
+                          : 'bg-transparent text-gray-700 hover:bg-indigo-100 dark:text-gray-300 dark:hover:bg-indigo-900/30'
                       )}
                       onClick={() => handleTagSelect(tag)}
                     >
@@ -381,51 +298,34 @@ export default function ArticlesPage() {
           </CardContent>
         </Card>
       </div>
-      
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <div className="overflow-auto pb-2">
           <TabsList className="bg-muted/50 p-1">
-            <TabsTrigger 
-              value="all" 
-              className="data-[state=active]:bg-background data-[state=active]:text-purple-700 dark:data-[state=active]:text-purple-400"
+            <TabsTrigger
+              value="all"
+              className="data-[state=active]:bg-background data-[state=active]:text-indigo-700 dark:data-[state=active]:text-indigo-400"
             >
               <FileText className="mr-2 h-4 w-4" />
               All Articles
             </TabsTrigger>
-            <TabsTrigger 
-              value="trending" 
-              className="data-[state=active]:bg-background data-[state=active]:text-purple-700 dark:data-[state=active]:text-purple-400"
-            >
-              <TrendingUp className="mr-2 h-4 w-4" />
-              Trending
-            </TabsTrigger>
-            <TabsTrigger 
-              value="liked" 
-              className="data-[state=active]:bg-background data-[state=active]:text-purple-700 dark:data-[state=active]:text-purple-400"
-            >
-              <Heart className="mr-2 h-4 w-4" />
-              Liked
-              {likedArticles.length > 0 && (
-                <Badge className="ml-2 bg-purple-600 hover:bg-purple-700 text-white">
-                  {likedArticles.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger 
-              value="bookmarked" 
-              className="data-[state=active]:bg-background data-[state=active]:text-purple-700 dark:data-[state=active]:text-purple-400"
-            >
-              <Bookmark className="mr-2 h-4 w-4" />
-              Bookmarked
-              {bookmarkedArticles.length > 0 && (
-                <Badge className="ml-2 bg-purple-600 hover:bg-purple-700 text-white">
-                  {bookmarkedArticles.length}
-                </Badge>
-              )}
-            </TabsTrigger>
+            {isContentWriter && (
+              <TabsTrigger
+                value="my-articles"
+                className="data-[state=active]:bg-background data-[state=active]:text-indigo-700 dark:data-[state=active]:text-indigo-400"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                My Articles
+                {myArticles.length > 0 && (
+                  <Badge className="ml-2 bg-indigo-600 hover:bg-indigo-700 text-white">
+                    {myArticles.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            )}
           </TabsList>
         </div>
-        
+
         <TabsContent value={activeTab} className="mt-0">
           {getTabContent()}
         </TabsContent>
@@ -434,7 +334,6 @@ export default function ArticlesPage() {
   );
 }
 
-// Helper component for article card skeleton
 function ArticleCardSkeleton() {
   return (
     <Card className="overflow-hidden">
@@ -451,4 +350,4 @@ function ArticleCardSkeleton() {
       </CardContent>
     </Card>
   );
-}
+} 

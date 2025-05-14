@@ -1,4 +1,3 @@
-// layouts/WriterLayout.tsx
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -11,26 +10,36 @@ import {
   Menu, 
   Wallet, 
   Bell, 
-  Plus 
+  Plus,
+  X 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
-import NotificationBell from "@/components/notification/NotificationBall";
+import { NotificationBell } from "@/components/notification";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
 
 export default function WriterLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const isActive = (path: string) => {
     return location.pathname === path;
   };
 
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const menuItems = [
     {
@@ -56,62 +65,171 @@ export default function WriterLayout() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col">
+    <div className="min-h-screen bg-purple-50/50 dark:bg-gray-950 flex flex-col">
       {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <header 
+        className={cn(
+          "bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-0 z-40 transition-shadow duration-200",
+          isScrolled && "shadow-sm"
+        )}
+      >
+        <div className="container mx-auto px-4">
           <div className="flex justify-between items-center h-16">
+            {/* Logo and Mobile Menu Button */}
             <div className="flex items-center">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleSidebar}
-                className="mr-4 md:hidden"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <Link to="/writer/dashboard" className="flex items-center">
+              <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+                <SheetTrigger asChild className="md:hidden">
+                  <Button variant="ghost" size="icon" className="mr-2">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="p-0">
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between border-b p-4">
+                      <div className="flex items-center gap-2">
+                        <PenTool className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                        <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-500 text-transparent bg-clip-text">WriterlyRewarded</span>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(false)}>
+                        <X className="h-5 w-5" />
+                      </Button>
+                    </div>
+                    
+                    {/* User Profile Card (Mobile) */}
+                    <div className="p-4 border-b">
+                      <div className="flex items-center space-x-3">
+                        <Avatar className="h-12 w-12 border-2 border-purple-200 dark:border-purple-700">
+                          {user?.avatar ? (
+                            <AvatarImage src={user.avatar} alt={user?.name || "User"} />
+                          ) : (
+                            <AvatarFallback className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                              {user?.name?.charAt(0) || "U"}
+                            </AvatarFallback>
+                          )}
+                        </Avatar>
+                        <div>
+                          <h3 className="font-medium">{user?.name}</h3>
+                          <p className="text-xs text-purple-600 dark:text-purple-400 capitalize">Content Writer</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="py-4 px-2">
+                      {menuItems.map((item) => (
+                        <Link
+                          key={item.path}
+                          to={item.path}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={cn(
+                            "flex items-center gap-3 px-3 py-3 rounded-md transition-colors mb-1",
+                            isActive(item.path)
+                              ? "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                          )}
+                        >
+                          <item.icon className="h-5 w-5" />
+                          <span>{item.label}</span>
+                        </Link>
+                      ))}
+                    </div>
+                    
+                    <div className="p-4 mt-4">
+                      <Button 
+                        variant="outline" 
+                        className="w-full bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-900/50"
+                        onClick={() => {
+                          navigate('/writer/articles/create');
+                          setIsMobileMenuOpen(false);
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Article
+                      </Button>
+                    </div>
+                    
+                    <div className="mt-auto">
+                      <Separator />
+                      <div className="p-4">
+                        <Button 
+                          variant="outline" 
+                          className="w-full text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 border-red-200 dark:border-red-900/50"
+                          onClick={logout}
+                        >
+                          <LogOut className="h-4 w-4 mr-2" />
+                          Sign Out
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
+              
+              {/* Desktop Logo */}
+              <Link to="/writer/dashboard" className="hidden md:flex items-center">
                 <PenTool className="h-6 w-6 text-purple-600 dark:text-purple-400 mr-2" />
-                <span className="text-xl font-bold text-purple-600 dark:text-purple-400">ContentHub Writer</span>
+                <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-500 text-transparent bg-clip-text">WriterlyRewarded</span>
+              </Link>
+              
+              {/* Mobile Logo */}
+              <Link to="/writer/dashboard" className="md:hidden flex items-center">
+                <PenTool className="h-5 w-5 text-purple-600 dark:text-purple-400 mr-1" />
+                <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-500 text-transparent bg-clip-text">WriterlyRewarded</span>
               </Link>
             </div>
             
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden md:flex border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-400 dark:hover:bg-purple-950/30"
+            {/* Desktop Navigation */}
+            <nav className="hidden md:flex items-center space-x-1">
+              {menuItems.map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={cn(
+                    "px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                    isActive(item.path)
+                      ? "bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.label}</span>
+                  </div>
+                </Link>
+              ))}
+              
+              <Button 
+                variant="outline" 
+                className="ml-2 bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-900/50"
                 onClick={() => navigate('/writer/articles/create')}
               >
-                <Plus className="h-4 w-4 mr-1" />
+                <Plus className="h-4 w-4 mr-2" />
                 New Article
               </Button>
-              
-              <NotificationBell />
+            </nav>
+            
+            {/* User Menu */}
+            <div className="flex items-center gap-2">
               <ThemeToggle variant="ghost" />
+              <NotificationBell />
               
               <div className="hidden md:flex items-center">
-                <div className="flex flex-col items-end">
-                  <span className="font-medium">{user?.name}</span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user?.role}</span>
-                </div>
+                <Avatar className="h-8 w-8 border border-gray-200 dark:border-gray-700">
+                  {user?.avatar ? (
+                    <AvatarImage src={user.avatar} alt={user?.name || "User"} />
+                  ) : (
+                    <AvatarFallback className="bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                      {user?.name?.charAt(0) || "U"}
+                    </AvatarFallback>
+                  )}
+                </Avatar>
               </div>
-              <div className="h-9 w-9 rounded-full overflow-hidden bg-purple-100 dark:bg-purple-800 ring-2 ring-purple-200 dark:ring-purple-700">
-                {user?.avatar ? (
-                  <img 
-                    src={user.avatar} 
-                    alt={user?.name || "User"} 
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  <User className="h-5 w-5 m-2 text-purple-600 dark:text-purple-300" />
-                )}
-              </div>
+              
               <Button 
                 variant="ghost" 
                 size="icon"
-                onClick={() => logout()}
+                onClick={logout}
                 className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                aria-label="Logout"
               >
                 <LogOut className="h-5 w-5" />
               </Button>
@@ -120,76 +238,14 @@ export default function WriterLayout() {
         </div>
       </header>
 
-      {/* Main Content with Sidebar */}
-      <div className="flex flex-grow">
-        {/* Sidebar */}
-        <aside
-          className={cn(
-            "bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 w-64 fixed md:relative inset-y-0 left-0 transform transition-transform duration-300 ease-in-out z-20 md:translate-x-0 h-[calc(100vh-64px)] md:h-auto",
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          )}
-        >
-          <div className="py-6 px-4">
-            {/* User Profile Card */}
-            <div className="mb-6 p-4 rounded-lg bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/30 dark:to-indigo-900/30">
-              <div className="flex items-center space-x-3">
-                <div className="h-12 w-12 rounded-full overflow-hidden bg-purple-100 dark:bg-purple-800 ring-2 ring-purple-200 dark:ring-purple-700">
-                  {user?.avatar ? (
-                    <img 
-                      src={user.avatar} 
-                      alt={user?.name || "User"} 
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <User className="h-7 w-7 m-2.5 text-purple-600 dark:text-purple-300" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-medium text-sm">{user?.name}</h3>
-                  <p className="text-xs text-purple-600 dark:text-purple-400 capitalize">Content Writer</p>
-                </div>
-              </div>
-            </div>
-            
-            <nav className="space-y-1">
-              {menuItems.map((item) => (
-                <Link 
-                  key={item.path} 
-                  to={item.path}
-                  className={cn(
-                    "group flex items-center px-3 py-3 text-sm font-medium rounded-md transition-all",
-                    isActive(item.path)
-                      ? "bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400"
-                      : "text-gray-700 dark:text-gray-300 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
-                  )}
-                >
-                  <item.icon 
-                    className={cn(
-                      "mr-3 h-5 w-5",
-                      isActive(item.path) 
-                        ? "text-purple-600 dark:text-purple-400" 
-                        : "text-gray-500 dark:text-gray-400 group-hover:text-purple-600 dark:group-hover:text-purple-400"
-                    )}
-                  />
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className={cn(
-          "flex-grow p-6 overflow-auto transition-all duration-300",
-          !sidebarOpen ? "md:ml-0" : ""
-        )}>
-          <Outlet />
-        </main>
-      </div>
+      {/* Main Content */}
+      <main className="flex-grow container mx-auto px-4 py-6">
+        <Outlet />
+      </main>
 
       {/* Footer */}
-      <footer className="bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 py-4">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <footer className="bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 py-4">
+        <div className="container mx-auto px-4">
           <p className="text-center text-sm text-gray-500 dark:text-gray-400">
             &copy; {new Date().getFullYear()} ContentHub. All rights reserved.
           </p>

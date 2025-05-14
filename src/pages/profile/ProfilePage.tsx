@@ -382,49 +382,52 @@ export default function UserProfilePage() {
                         />
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <FormField
-                            control={profileForm.control}
-                            name="age"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel className="flex items-center gap-1.5">
-                                  <Calendar className="h-4 w-4" />
-                                  Age
-                                </FormLabel>
-                                <FormControl>
-                                  <Input
-                                    placeholder="Your age"
-                                    type="number"
-                                    className="bg-white/50 dark:bg-gray-950/50"
-                                    {...field}
-                                    value={field.value ?? ''}
-                                    onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : '')}
-                                  />
-                                </FormControl>
-                                <FormMessage />
-                              </FormItem>
-                            )}
+                          control={profileForm.control}
+                          name="age"
+                          render={({ field }) => (
+                            <FormItem>
+                            <FormLabel className="flex items-center gap-1.5">
+                              <Calendar className="h-4 w-4" />
+                              Age
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                              placeholder="Your age"
+                              type="number"
+                              className="bg-white/50 dark:bg-gray-950/50"
+                              {...field}
+                              value={field.value ?? ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                field.onChange(value ? parseInt(value, 10) : undefined);
+                              }}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                          )}
                           />
                           <FormField
-                            control={profileForm.control}
-                            name="gender"
-                            render={({ field }) => (
-                              <FormItem>
-                                <FormLabel>Gender</FormLabel>
-                                <Select onValueChange={field.onChange} value={field.value}>
-                                  <FormControl>
-                                    <SelectTrigger className="bg-white/50 dark:bg-gray-950/50">
-                                      <SelectValue placeholder="Select gender" />
-                                    </SelectTrigger>
-                                  </FormControl>
-                                  <SelectContent>
-                                    <SelectItem value="male">Male</SelectItem>
-                                    <SelectItem value="female">Female</SelectItem>
-                                    <SelectItem value="other">Other</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <FormMessage />
-                              </FormItem>
-                            )}
+                          control={profileForm.control}
+                          name="gender"
+                          render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Gender</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value}>
+                              <FormControl>
+                              <SelectTrigger className="bg-white/50 dark:bg-gray-950/50">
+                                <SelectValue placeholder="Select gender" />
+                              </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                              <SelectItem value="male">Male</SelectItem>
+                              <SelectItem value="female">Female</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                            </FormItem>
+                          )}
                           />
                         </div>
                         <FormField

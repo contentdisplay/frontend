@@ -8,11 +8,12 @@ import {
   Calendar, 
   CreditCard, 
   Filter,
-  Wallet as WalletIcon
+  Wallet as WalletIcon,
+  DollarSign
 } from "lucide-react";
 import WalletCard from "@/components/wallet/WalletCard";
 import TransactionsList from "@/components/wallet/TransactionsList";
-import walletService, { WalletInfo, Transaction } from "@/services/walletService";
+import walletService, { WalletInfo, Transaction, QRCode } from "@/services/walletService";
 import { toast } from "sonner";
 import {
   Select,
@@ -21,6 +22,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function WalletPage() {
   const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
@@ -29,6 +40,17 @@ export default function WalletPage() {
   const [isTransactionsLoading, setIsTransactionsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
   const [timeFilter, setTimeFilter] = useState("all");
+  const [showDepositDialog, setShowDepositDialog] = useState(false);
+  const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
+  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
+  const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [qrCode, setQrCode] = useState<QRCode | null>(null);
+
+  const pricingOptions = [
+    { payment: 1000, balance: 1500 },
+    { payment: 500, balance: 700 },
+    { payment: 100, balance: 130 },
+  ];
 
   useEffect(() => {
     loadWalletInfo();
@@ -62,11 +84,67 @@ export default function WalletPage() {
     }
   };
 
-  const handleAddFunds = () => {
-    toast.info("This feature is not implemented yet.");
+  const fetchQRCode = async () => {
+    try {
+      const qrCodeData = await walletService.initiatePaymentRequest();
+      setQrCode(qrCodeData);
+    } catch (error) {
+      toast.error("Failed to load QR code");
+      setQrCode(null);
+    }
   };
 
-  // Filter transactions based on the active tab
+  const handleDepositOpen = async () => {
+    await fetchQRCode();
+    setShowDepositDialog(true);
+  };
+
+  const handleWithdrawOpen = async () => {
+    await fetchQRCode();
+    setShowWithdrawDialog(true);
+  };
+
+  const handleDeposit = async () => {
+    if (!selectedAmount || !screenshot) {
+      toast.error("Please select an amount and upload a screenshot");
+      return;
+    }
+
+    try {
+      await walletService.createPaymentRequest('deposit', selectedAmount, screenshot);
+      toast.success("Deposit request submitted successfully");
+      setShowDepositDialog(false);
+      setSelectedAmount(null);
+      setScreenshot(null);
+      setQrCode(null);
+    } catch (error) {
+      toast.error("Failed to submit deposit request");
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!screenshot) {
+      toast.error("Please upload a screenshot of the ₹100 payment");
+      return;
+    }
+
+    try {
+      await walletService.createPaymentRequest('withdraw', 100, screenshot);
+      toast.success("Withdraw request submitted successfully");
+      setShowWithdrawDialog(false);
+      setScreenshot(null);
+      setQrCode(null);
+    } catch (error) {
+      toast.error("Failed to submit withdraw request");
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setScreenshot(e.target.files[0]);
+    }
+  };
+
   const filteredTransactions = transactions.filter((transaction) => {
     if (activeTab === "all") return true;
     if (activeTab === "income") 
@@ -98,17 +176,17 @@ export default function WalletPage() {
       </div>
       
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Wallet Card */}
         <div className="md:col-span-1">
           {walletInfo && (
             <WalletCard 
               walletInfo={walletInfo} 
               isLoading={isWalletLoading} 
+              onDeposit={handleDepositOpen}
+              onWithdraw={handleWithdrawOpen}
             />
           )}
         </div>
         
-        {/* Stats Card */}
         <Card className="md:col-span-1 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950 dark:to-indigo-950 dark:border-blue-900/50">
           <CardHeader className="pb-2">
             <CardTitle className="text-xl">Your Stats</CardTitle>
@@ -121,7 +199,7 @@ export default function WalletPage() {
                   <ArrowUpRight className="h-5 w-5 text-green-600" />
                 </div>
                 <p className="text-xs text-muted-foreground">Income</p>
-                <p className="font-bold">${stats.income.toFixed(2)}</p>
+                <p className="font-bold">₹{stats.income.toFixed(2)}</p>
               </div>
               
               <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
@@ -129,7 +207,7 @@ export default function WalletPage() {
                   <ArrowDownLeft className="h-5 w-5 text-amber-600" />
                 </div>
                 <p className="text-xs text-muted-foreground">Spending</p>
-                <p className="font-bold">${stats.spending.toFixed(2)}</p>
+                <p className="font-bold">₹{stats.spending.toFixed(2)}</p>
               </div>
               
               <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
@@ -142,20 +220,29 @@ export default function WalletPage() {
             </div>
             
             <div className="mt-4 flex justify-between">
-              <Button variant="outline" size="sm" className="text-blue-600 border-blue-200">
-                <WalletIcon className="mr-1 h-4 w-4" />
-                Manage Funds
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-blue-600 border-blue-200"
+                onClick={handleDepositOpen}
+              >
+                <DollarSign className="mr-1 h-4 w-4" />
+                Deposit
               </Button>
-              <Button variant="outline" size="sm" className="text-purple-600 border-purple-200">
-                <CreditCard className="mr-1 h-4 w-4" />
-                Connect Bank
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-purple-600 border-purple-200"
+                onClick={handleWithdrawOpen}
+              >
+                <DollarSign className="mr-1 h-4 w-4" />
+                Withdraw
               </Button>
             </div>
           </CardContent>
         </Card>
       </div>
       
-      {/* Transactions */}
       <div className="space-y-4">
         <div className="flex justify-between items-center">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full max-w-md">
@@ -194,6 +281,99 @@ export default function WalletPage() {
           }
         />
       </div>
+
+      {/* Deposit Dialog */}
+      <Dialog open={showDepositDialog} onOpenChange={setShowDepositDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Deposit Funds</DialogTitle>
+            <DialogDescription>
+              Select a pricing option, scan the QR code to make payment, and upload the payment screenshot.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              {pricingOptions.map((option) => (
+                <Button
+                  key={option.payment}
+                  variant={selectedAmount === option.payment ? "default" : "outline"}
+                  className="flex flex-col h-auto py-3"
+                  onClick={() => setSelectedAmount(option.payment)}
+                >
+                  <span>Pay ₹{option.payment}</span>
+                  <span className="text-sm">Get ₹{option.balance}</span>
+                </Button>
+              ))}
+            </div>
+            {qrCode ? (
+              <div className="mt-4">
+                <p className="text-sm text-muted-foreground mb-2">Scan this QR code to make payment:</p>
+                <img src={qrCode.image} alt={qrCode.description || "QR Code"} className="w-32 h-32 mx-auto" />
+                {qrCode.description && <p className="text-sm text-center mt-2">{qrCode.description}</p>}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading QR code...</p>
+            )}
+            <div>
+              <Label htmlFor="screenshot">Upload Payment Screenshot</Label>
+              <Input
+                id="-screenshot"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDepositDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleDeposit} disabled={!selectedAmount || !screenshot || !qrCode}>
+              Submit Deposit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Withdraw Dialog */}
+      <Dialog open={showWithdrawDialog} onOpenChange={setShowWithdrawDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw Funds</DialogTitle>
+            <DialogDescription>
+              You need to make a payment of ₹100 to create a secure SSL socket. Scan the QR code and upload the payment screenshot.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {qrCode ? (
+              <div className="mt-4">
+                <p className="text-sm text-muted-foreground mb-2">Scan this QR code to make payment:</p>
+                <img src={qrCode.image} alt={qrCode.description || "QR Code"} className="w-32 h-32 mx-auto" />
+                {qrCode.description && <p className="text-sm text-center mt-2">{qrCode.description}</p>}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading QR code...</p>
+            )}
+            <div>
+              <Label htmlFor="screenshot">Upload ₹100 Payment Screenshot</Label>
+              <Input
+                id="screenshot"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowWithdrawDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleWithdraw} disabled={!screenshot || !qrCode}>
+              Submit Withdraw
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

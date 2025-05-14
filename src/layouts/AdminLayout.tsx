@@ -10,6 +10,7 @@ import {
   User, 
   LogOut, 
   Menu,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -63,6 +64,11 @@ export default function AdminLayout() {
       icon: User,
       label: "Profile",
       path: "/admin/profile",
+    },
+    {
+      icon: Wallet,
+      label: "Manage Wallet & QR",
+      path: "/admin/wallet-qr",
     },
   ];
 

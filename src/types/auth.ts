@@ -2,6 +2,8 @@
 export type UserRole = "user" | "writer" | "admin";
 
 export interface User {
+  
+  roles: any;
   username: any;
   id: string;
   name: string;
