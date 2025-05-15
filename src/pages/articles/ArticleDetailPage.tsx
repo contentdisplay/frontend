@@ -8,11 +8,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import articleService, { Article } from '@/services/articleService';
+import walletService from '@/services/walletService';
 import { format } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ArticleRewardSection } from '@/components/articles/ArticleRewardSection';
 
 export default function ArticleDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -74,7 +76,10 @@ export default function ArticleDetailPage() {
     try {
       const response = await articleService.collectReward(article.slug, 0);
       return response.detail.includes('already collected');
-    } catch (error) {
+    } catch (error: any) {
+      if (error.detail && error.detail.includes('already collected')) {
+        return true;
+      }
       return false;
     }
   };
@@ -89,12 +94,15 @@ export default function ArticleDetailPage() {
       const seconds = Math.floor(elapsedMs / 1000);
       setReadingTimeSeconds(seconds);
 
-      const requiredTime = (article?.word_count || 500) / 200 * 60;
-      if (seconds >= requiredTime * 0.9) {
+      // Calculate required reading time (minimum 5 minutes or 90% of estimated time)
+      const estimatedTimeSeconds = (article?.word_count || 500) / 200 * 60;
+      const requiredTimeSeconds = Math.max(300, estimatedTimeSeconds * 0.9); // minimum 5 minutes
+      
+      if (seconds >= requiredTimeSeconds) {
         setIsReadingComplete(true);
         setReadingProgress(100);
       } else {
-        setReadingProgress((seconds / requiredTime) * 100);
+        setReadingProgress((seconds / requiredTimeSeconds) * 100);
       }
     }, 1000);
   };
@@ -108,7 +116,11 @@ export default function ArticleDetailPage() {
       const totalHeight = element.scrollHeight - element.clientHeight;
       const scrollPosition = element.scrollTop;
       const scrollPercentage = Math.min(100, Math.ceil((scrollPosition / totalHeight) * 100));
-      if (scrollPercentage >= 90 && readingTimeSeconds >= (article?.word_count || 500) / 200 * 60 * 0.9) {
+      
+      const estimatedTimeSeconds = (article?.word_count || 500) / 200 * 60;
+      const requiredTimeSeconds = Math.max(300, estimatedTimeSeconds * 0.9); // minimum 5 minutes
+      
+      if (scrollPercentage >= 90 && readingTimeSeconds >= requiredTimeSeconds) {
         setIsReadingComplete(true);
         setReadingProgress(100);
       }
@@ -169,15 +181,23 @@ export default function ArticleDetailPage() {
   };
 
   const handleClaimReward = async () => {
-    if (!slug || !isReadingComplete || isRewardClaimed) return;
+    if (!slug || !article || !isReadingComplete || isRewardClaimed) return;
 
     try {
       setIsClaimingReward(true);
       const response = await articleService.collectReward(slug, readingTimeSeconds);
+      
+      // Add rewards to wallet
+      try {
+        await walletService.addRewards(article.title, slug, response.reward);
+      } catch (error) {
+        console.error("Failed to update wallet rewards:", error);
+      }
+      
       setIsRewardClaimed(true);
       toast.success(`Reward claimed: ₹${response.reward.toFixed(2)}`);
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || 'Failed to claim reward');
+      toast.error(error.detail || 'Failed to claim reward');
     } finally {
       setIsClaimingReward(false);
     }
@@ -197,6 +217,12 @@ export default function ArticleDetailPage() {
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
     return format(new Date(dateString), 'MMMM dd, yyyy');
+  };
+
+  const getReadTime = () => {
+    if (!article) return 0;
+    const wordsPerMinute = 200;
+    return Math.max(1, Math.ceil(article.word_count / wordsPerMinute));
   };
 
   if (isLoading) {
@@ -294,7 +320,7 @@ export default function ArticleDetailPage() {
               </div>
               <div className="flex items-center gap-1">
                 <Clock className="h-4 w-4" />
-                <span>{Math.ceil(readingTimeSeconds / 60)} min read</span>
+                <span>{getReadTime()} min read</span>
               </div>
               <div>
                 <span>{formatDate(article.published_at || article.created_at)}</span>
@@ -354,7 +380,7 @@ export default function ArticleDetailPage() {
                 onClick={handleLike}
                 className={isLiked ? 'text-red-500' : 'text-gray-600 dark:text-gray-400'}
               >
-                <Heart className="mr-1 h-4 w-4" />
+                <Heart className={`mr-1 h-4 w-4 ${isLiked ? 'fill-current' : ''}`} />
                 <span>{likesCount} Likes</span>
               </Button>
               <Button
@@ -363,7 +389,7 @@ export default function ArticleDetailPage() {
                 onClick={handleBookmark}
                 className={isBookmarked ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-400'}
               >
-                <Bookmark className="mr-1 h-4 w-4" />
+                <Bookmark className={`mr-1 h-4 w-4 ${isBookmarked ? 'fill-current' : ''}`} />
                 <span>{bookmarksCount} Saves</span>
               </Button>
               <Button
@@ -412,35 +438,17 @@ export default function ArticleDetailPage() {
             )}
           </div>
 
-          <Card className="bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-800">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="space-y-2 w-full">
-                  <div className="text-sm font-medium text-indigo-800 dark:text-indigo-200">
-                    Reading Progress
-                  </div>
-                  <div className="text-xs text-indigo-600 dark:text-indigo-400">
-                    {isReadingComplete
-                      ? "You've completed this article!"
-                      : `${Math.min(100, Math.round(readingProgress))}% complete`}
-                  </div>
-                  <Progress
-                    value={readingProgress}
-                    className="h-2 bg-indigo-200 dark:bg-indigo-800"
-                    indicatorClassName="bg-amber-400"
-                  />
-                </div>
-                <div className="text-center md:text-right">
-                  <div className="text-sm font-medium text-indigo-800 dark:text-indigo-200">
-                    Potential Reward
-                  </div>
-                  <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
-                    ₹{article.reward.toFixed(2)}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {!isOwnArticle && (
+            <ArticleRewardSection
+              articleTitle={article.title}
+              rewardAmount={article.reward}
+              readingProgress={readingProgress}
+              isReadingComplete={isReadingComplete}
+              isRewardClaimed={isRewardClaimed}
+              isClaimingReward={isClaimingReward}
+              onClaimReward={handleClaimReward}
+            />
+          )}
         </article>
 
         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

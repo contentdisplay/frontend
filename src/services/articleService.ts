@@ -23,6 +23,7 @@ export interface Article {
   rewards_collected: number;
   is_liked: boolean;
   is_bookmarked: boolean;
+  status?: string;
 }
 
 export interface ArticleLikeResponse {
@@ -66,11 +67,17 @@ export interface ArticleFormData {
   thumbnail?: File;
 }
 
+export interface PublishRequestResponse {
+  detail: string;
+  remaining_balance?: number;
+  redirect_to_deposit?: boolean;
+}
+
 const articleService = {
   // Get all published articles
   getPublishedArticles: async (): Promise<Article[]> => {
     const response = await api.get('/articles/see/');
-    return response.data.results || []; // Handle paginated response
+    return response.data.results || response.data || []; // Handle paginated or direct response
   },
 
   // Get article by slug
@@ -78,6 +85,11 @@ const articleService = {
     const response = await api.get(`/articles/${slug}/`);
     return response.data;
   },
+  // Add this to services/articleService.ts
+getAllWriterArticles: async (): Promise<Article[]> => {
+  const response = await api.get('/articles/writer/articles/');
+  return response.data.results || response.data || [];
+},
 
   // Create a new article
   createArticle: async (data: ArticleFormData): Promise<Article> => {
@@ -117,9 +129,14 @@ const articleService = {
   },
 
   // Request to publish an article
-  requestPublish: async (slug: string): Promise<{ detail: string }> => {
-    const response = await api.post(`/articles/request-publish/${slug}/`);
-    return response.data;
+  requestPublish: async (slug: string): Promise<PublishRequestResponse> => {
+    try {
+      const response = await api.post(`/articles/request-publish/${slug}/`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Request publish error:', error.response?.data);
+      throw error.response?.data || { detail: 'Failed to request publish' };
+    }
   },
 
   // Get analytics for content writer's articles
@@ -130,9 +147,26 @@ const articleService = {
 
   // Collect reward for reading an article
   collectReward: async (slug: string, readingTimeSeconds: number): Promise<RewardCollectionResponse> => {
-    const response = await api.post(`/articles/${slug}/collect-reward/`, {
-      reading_time: readingTimeSeconds,
-    });
+    try {
+      const response = await api.post(`/articles/${slug}/collect-reward/`, {
+        reading_time: readingTimeSeconds,
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Collect reward error:', error.response?.data);
+      throw error.response?.data || { detail: 'Failed to collect reward' };
+    }
+  },
+
+  // Get pending articles for admin approval
+  getPendingArticles: async (): Promise<Article[]> => {
+    const response = await api.get('/articles/pending-publish/');
+    return response.data.results || response.data || [];
+  },
+
+  // Approve an article for publishing (admin only)
+  approveArticle: async (slug: string): Promise<{ detail: string }> => {
+    const response = await api.post(`/articles/approve-publish/${slug}/`);
     return response.data;
   },
 
@@ -177,6 +211,23 @@ const articleService = {
     const response = await api.get('/articles/trending/');
     return response.data;
   },
+
+  // Get writer analytics
+  getWriterAnalytics: async (): Promise<any> => {
+    const response = await api.get('/articles/analytics/');
+    return response.data;
+  },
+
+  checkArticleStatus: async (slug: string): Promise<{ status: string, message: string }> => {
+    try {
+      const response = await api.get(`/articles/${slug}/status/`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Check status error:', error.response?.data);
+      throw error.response?.data || { status: 'error', message: 'Failed to check article status' };
+    }
+  },
 };
+
 
 export default articleService;

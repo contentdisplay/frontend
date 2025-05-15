@@ -1,5 +1,6 @@
-// components/articles/ArticleForm.tsx
-import React, { useState } from 'react';
+// components/articles/ArticleForm.tsx - Modified version to emphasize draft functionality
+
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,13 +17,15 @@ import {
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Article, ArticleFormData } from '@/services/articleService';
-import { X, UploadCloud } from 'lucide-react';
+import { X, UploadCloud, Wallet, AlertCircle, Save } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { toast } from 'sonner';
 import articleService from '@/services/articleService';
+import walletService from '@/services/walletService';
 import { useNavigate } from 'react-router-dom';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const articleFormSchema = z.object({
   title: z.string().min(5, { message: 'Title must be at least 5 characters long' }),
@@ -37,16 +40,23 @@ interface ArticleFormProps {
   isSubmitting: boolean;
   mode: 'create' | 'edit';
   article?: Article;
+  onRequestPublish?: (slug: string) => Promise<void>;
 }
 
-export default function ArticleForm({ initialData, isSubmitting, mode }: ArticleFormProps) {
+export default function ArticleForm({ initialData, isSubmitting, mode, onRequestPublish }: ArticleFormProps) {
   const navigate = useNavigate();
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(
     initialData?.thumbnail || null
   );
   const [tagInput, setTagInput] = useState('');
-
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [requiredBalance, setRequiredBalance] = useState<number>(150);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [showDepositPrompt, setShowDepositPrompt] = useState(false);
+  const [isPublishable, setIsPublishable] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  
   const form = useForm<z.infer<typeof articleFormSchema>>({
     resolver: zodResolver(articleFormSchema),
     defaultValues: {
@@ -56,6 +66,30 @@ export default function ArticleForm({ initialData, isSubmitting, mode }: Article
       tags: initialData?.tags || [],
     },
   });
+
+  useEffect(() => {
+    if (mode === 'create' || (mode === 'edit' && initialData && !initialData.is_published)) {
+      checkWalletBalance();
+    }
+  }, [mode, initialData]);
+
+  const checkWalletBalance = async () => {
+    try {
+      setIsLoadingBalance(true);
+      const result = await walletService.checkPublishBalance();
+      setWalletBalance(result.current_balance);
+      setRequiredBalance(result.required_balance);
+      setIsPublishable(result.has_sufficient_balance);
+      setShowDepositPrompt(!result.has_sufficient_balance);
+    } catch (error) {
+      console.error("Failed to check wallet balance:", error);
+      setWalletBalance(0);
+      setShowDepositPrompt(true);
+      setIsPublishable(false);
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  };
 
   const handleAddTag = () => {
     if (!tagInput.trim()) return;
@@ -87,6 +121,37 @@ export default function ArticleForm({ initialData, isSubmitting, mode }: Article
     }
   };
 
+  const handleDepositRedirect = () => {
+    navigate('/wallet');
+  };
+
+  const handleSaveDraft = async (values: z.infer<typeof articleFormSchema>) => {
+    try {
+      setIsSavingDraft(true);
+      const formData: ArticleFormData = {
+        title: values.title,
+        description: values.description,
+        content: values.content,
+        tags: values.tags,
+        thumbnail: thumbnail || undefined,
+      };
+
+      if (mode === 'create') {
+        await articleService.createArticle(formData);
+        toast.success('Draft saved successfully');
+      } else {
+        if (!initialData?.slug) throw new Error('Article slug not provided');
+        await articleService.updateArticle(initialData.slug, formData);
+        toast.success('Draft updated successfully');
+      }
+      navigate('/writer/articles');
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || `Failed to save draft`);
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
   const handleSubmit = async (values: z.infer<typeof articleFormSchema>) => {
     try {
       const formData: ArticleFormData = {
@@ -105,15 +170,82 @@ export default function ArticleForm({ initialData, isSubmitting, mode }: Article
         await articleService.updateArticle(initialData.slug, formData);
         toast.success('Article updated successfully');
       }
-      navigate('/writer/dashboard');
+      navigate('/writer/articles');
     } catch (error: any) {
       toast.error(error.response?.data?.detail || `Failed to ${mode === 'create' ? 'create' : 'update'} article`);
+    }
+  };
+
+  const handleRequestPublish = async () => {
+    if (!initialData?.slug || !onRequestPublish) return;
+    
+    try {
+      // First check if wallet has sufficient balance
+      const balanceCheck = await walletService.checkPublishBalance();
+      if (!balanceCheck.has_sufficient_balance) {
+        toast.error(`Insufficient balance. You need ₹${balanceCheck.required_balance} to publish.`);
+        setShowDepositPrompt(true);
+        return;
+      }
+      
+      // Request publication
+      await onRequestPublish(initialData.slug);
+      
+      toast.success('Publish request sent successfully. Article is now pending approval and will be reviewed within 15 minutes.');
+      navigate('/writer/articles');
+    } catch (error: any) {
+      if (error.redirect_to_deposit) {
+        toast.error('Insufficient balance. Please add funds to your wallet.');
+        handleDepositRedirect();
+      } else {
+        toast.error(error.response?.data?.detail || 'Failed to request article publication');
+      }
     }
   };
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6 max-w-4xl mx-auto">
+        {/* Auto-save feature info */}
+        <Alert className="bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800">
+          <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+          <AlertTitle className="text-blue-800 dark:text-blue-400">Writer Features</AlertTitle>
+          <AlertDescription className="text-blue-700 dark:text-blue-300">
+            <p>You can save this article as a draft and return to edit it later.</p>
+            <p className="mt-1">When you're ready to publish, you can request admin review (₹150 fee) which typically takes 15 minutes.</p>
+          </AlertDescription>
+        </Alert>
+
+        {showDepositPrompt && (
+          <Alert variant="warning" className="bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800">
+            <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+            <AlertTitle className="text-yellow-800 dark:text-yellow-400">Publishing Fee Required</AlertTitle>
+            <AlertDescription className="text-yellow-700 dark:text-yellow-300">
+              <p>
+                Publishing an article requires a fee of ₹{requiredBalance.toFixed(2)}. Your current wallet balance 
+                is ₹{walletBalance?.toFixed(2) || '0.00'}, which is 
+                {walletBalance !== null && walletBalance < requiredBalance 
+                  ? ` not sufficient. You need ₹${(requiredBalance - walletBalance).toFixed(2)} more.`
+                  : ' sufficient for publishing.'
+                }
+              </p>
+              {walletBalance !== null && walletBalance < requiredBalance && (
+                <div className="mt-4">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={handleDepositRedirect}
+                    className="bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-yellow-300"
+                  >
+                    <Wallet className="mr-2 h-4 w-4" />
+                    Add Funds to Wallet
+                  </Button>
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Thumbnail upload */}
         <div className="space-y-2">
           <FormLabel>Thumbnail Image</FormLabel>
@@ -260,26 +392,75 @@ export default function ArticleForm({ initialData, isSubmitting, mode }: Article
           )}
         />
 
-        <div className="flex justify-end pt-4 gap-4">
+        <div className="flex justify-between pt-4 gap-4">
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate('/writer/dashboard')}
+            onClick={() => navigate('/writer/articles')}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
-                {mode === 'edit' ? 'Updating...' : 'Creating...'}
-              </>
-            ) : mode === 'edit' ? (
-              'Update Article'
-            ) : (
-              'Create Article'
+          
+          <div className="flex gap-2">
+            {/* Save as Draft Button */}
+            <Button
+              type="button"
+              variant="outline"
+              className="text-blue-600 border-blue-300 hover:bg-blue-50"
+              onClick={() => handleSaveDraft(form.getValues())}
+              disabled={isSavingDraft}
+            >
+              {isSavingDraft ? (
+                <>
+                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save as Draft
+                </>
+              )}
+            </Button>
+            
+            {mode === 'edit' && initialData && !initialData.is_published && !initialData.is_pending_publish && (
+              <Button
+                type="button"
+                variant="outline"
+                className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                onClick={handleRequestPublish}
+                disabled={!isPublishable || isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Wallet className="mr-2 h-4 w-4" />
+                    Request Publish (₹150)
+                  </>
+                )}
+              </Button>
             )}
-          </Button>
+            
+            <Button 
+              type="submit" 
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
+                  {mode === 'edit' ? 'Updating...' : 'Creating...'}
+                </>
+              ) : mode === 'edit' ? (
+                'Update Article'
+              ) : (
+                'Create Article'
+              )}
+            </Button>
+          </div>
         </div>
       </form>
     </Form>
