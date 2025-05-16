@@ -1,23 +1,22 @@
-// pages/articles/WriterArticlesPage.tsx
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { 
-  AlertCircle, BookOpen, Edit, Eye, FileText, Loader2, Plus, 
-  PlusCircle, Send, Trash2, Info, Clock
+  AlertCircle, BookOpen, Info, PlusCircle, Loader2 
 } from 'lucide-react';
-import ArticleCard from '@/components/articles/ArticleCard';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
+
+import { useAuth } from '@/context/AuthContext';
 import articleService, { Article } from '@/services/articleService';
 import walletService from '@/services/walletService';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useAuth } from '@/context/AuthContext';
+import { ArticleList } from '@/components/articles/ArticleList';
+import { ArticleStats } from '@/components/articles/ArticleStats';
 
 export default function WriterArticlesPage() {
   const { user } = useAuth();
@@ -42,11 +41,16 @@ export default function WriterArticlesPage() {
     likes: 0,
     earnings: 0
   });
+  const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
+    if (user && user.role !== 'writer') {
+      setError('You need writer privileges to view articles.');
+    }
+    
     loadArticles();
     loadWalletInfo();
-  }, []);
+  }, [user]);
   
   useEffect(() => {
     filterArticles();
@@ -55,66 +59,69 @@ export default function WriterArticlesPage() {
   const loadArticles = async () => {
     setIsLoading(true);
     try {
-      // Use the new endpoint that gets all articles for the current writer
-      const data = await articleService.getAllWriterArticles();
-      setArticles(data);
+      const articlesData = await articleService.getPublishedArticles();
+      console.log('Loaded articles:', articlesData);
+      
+      setArticles(articlesData);
       
       // Calculate stats
-      const reads = data.reduce((sum, article) => sum + article.normal_user_reads, 0);
-      const likes = data.reduce((sum, article) => sum + article.likes_count, 0);
+      const reads = articlesData.reduce((sum, article) => sum + (article.total_reads || 0), 0);
+      const likes = articlesData.reduce((sum, article) => sum + (article.likes_count || 0), 0);
       
-      // Get analytics for earnings
-      const analytics = await articleService.getArticleAnalytics();
-      const totalEarnings = analytics.reduce((sum, item) => sum + item.total_earnings, 0);
-      
-      setStats({
-        total: data.length,
-        published: data.filter(a => a.is_published).length,
-        draft: data.filter(a => !a.is_published && !a.is_pending_publish).length,
-        pending: data.filter(a => a.is_pending_publish).length,
+      const statsObj = {
+        total: articlesData.length,
+        published: articlesData.filter(a => a.is_published).length,
+        draft: articlesData.filter(a => !a.is_published && !a.is_pending_publish).length,
+        pending: articlesData.filter(a => a.is_pending_publish).length,
         reads,
         likes,
-        earnings: totalEarnings
-      });
+        earnings: 0 // Default value
+      };
+      
+      loadEarningsData(statsObj);
     } catch (error) {
       console.error('Error loading articles:', error);
       toast.error('Failed to load your articles');
+      setArticles([]);
+      setStats({
+        total: 0, published: 0, draft: 0, pending: 0, reads: 0, likes: 0, earnings: 0
+      });
     } finally {
       setIsLoading(false);
     }
   };
-  const fetchArticles = async () => {
+  
+  const loadEarningsData = async (statsObj) => {
     try {
-      setIsLoading(true);
-      // Try to get the data from the writer articles endpoint
-      const data = await articleService.getAllWriterArticles();
-      setArticles(data);
+      const earnings = await articleService.getWriterEarnings();
       
-      // If analytics fails, at least we have the articles
-      try {
-        // Try to get analytics data, but don't block loading if it fails
-        const analytics = await articleService.getArticleAnalytics();
-        console.log('Article analytics loaded:', analytics);
-        // You could use this data to enhance the UI if needed
-      } catch (analyticsError) {
-        console.warn('Failed to load analytics, but articles loaded successfully:', analyticsError);
-        // Continue without analytics data
+      // Handle different response formats
+      const earningsArray = Array.isArray(earnings) ? earnings : 
+                          earnings?.results ? earnings.results : 
+                          earnings?.data ? earnings.data : [];
+      
+      if (earningsArray.length > 0) {
+        const totalEarnings = earningsArray.reduce((sum, item) => {
+          return sum + (item.points_earned || 0);
+        }, 0);
+        
+        statsObj.earnings = totalEarnings;
       }
-    } catch (err: any) {
-      console.error('Failed to fetch articles:', err);
-      setError(err.response?.data?.detail || 'Failed to load articles');
-      toast.error('Failed to load your articles');
-    } finally {
-      setIsLoading(false);
+      
+      setStats(statsObj);
+    } catch (error) {
+      console.log('Using default earnings value due to API error:', error);
+      setStats(statsObj);
     }
   };
   
   const loadWalletInfo = async () => {
     try {
       const data = await walletService.getWalletInfo();
-      setWalletBalance(data.balance);
+      setWalletBalance(data.reward_points || data.balance || 0);
     } catch (error) {
       console.error('Failed to load wallet info:', error);
+      toast.error('Failed to load wallet information');
     }
   };
   
@@ -139,61 +146,40 @@ export default function WriterArticlesPage() {
     if (searchTerm) {
       filtered = filtered.filter(article => 
         article.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        article.description.toLowerCase().includes(searchTerm.toLowerCase())
+        (article.description && article.description.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
     
     setFilteredArticles(filtered);
   };
   
-  const handleRequestPublish = (article: Article) => {
-    setSelectedArticle(article);
-    setShowPublishDialog(true);
-  };
-  
-  const handlePublishConfirm = async () => {
-    if (!selectedArticle) return;
-    
-    setIsSubmitting(true);
+  const handleRequestPublish = async (slug: string) => {
     try {
-      // Check wallet balance first
-      const balanceCheck = await walletService.checkPublishBalance();
-      
-      if (!balanceCheck.has_sufficient_balance) {
-        toast.error(`Insufficient balance. You need ₹${balanceCheck.required_balance} to publish.`);
+      if ((walletBalance || 0) < 150) {
+        toast.error('Insufficient balance. You need ₹150 to publish.');
         navigate('/wallet');
         return;
       }
       
-      const publishResult = await articleService.requestPublish(selectedArticle.slug);
+      const response = await articleService.requestPublish(slug);
       
-      toast.success(publishResult.detail || 'Publish request sent successfully. An admin will review your article within 15 minutes.');
+      toast.success(response.detail || 'Publish request sent successfully');
       
-      if (publishResult.remaining_balance !== undefined) {
-        setWalletBalance(publishResult.remaining_balance);
-      }
+      // Refresh articles list
+      loadArticles();
       
-      // Update the article in the list
-      setArticles(prevArticles => 
-        prevArticles.map(article => 
-          article.id === selectedArticle.id 
-            ? { ...article, is_pending_publish: true, status: 'pending' } 
-            : article
-        )
-      );
+      // Update wallet balance
+      setWalletBalance((prevBalance) => (prevBalance !== null ? prevBalance - 150 : null));
       
-      setShowPublishDialog(false);
     } catch (error: any) {
       console.error('Publish request error:', error);
       
-      if (error.redirect_to_deposit) {
+      if (error.response?.status === 400 && error.response?.data?.detail?.includes('Insufficient')) {
         toast.error('Insufficient balance. Redirecting to wallet page...');
         navigate('/wallet');
       } else {
-        toast.error(error.detail || 'Failed to request publish');
+        toast.error(error.response?.data?.detail || 'Failed to request publish');
       }
-    } finally {
-      setIsSubmitting(false);
     }
   };
   
@@ -203,17 +189,14 @@ export default function WriterArticlesPage() {
   };
   
   const handleDeleteConfirm = async () => {
-    if (!articleToDelete) return;
+    if (!articleToDelete?.slug) return;
     
     try {
       await articleService.deleteArticle(articleToDelete.slug);
       toast.success('Article deleted successfully');
       
-      // Remove article from state
-      setArticles(prevArticles => 
-        prevArticles.filter(article => article.id !== articleToDelete.id)
-      );
-      
+      // Refresh articles
+      loadArticles();
       setShowDeleteDialog(false);
     } catch (error) {
       toast.error('Failed to delete article');
@@ -235,10 +218,7 @@ export default function WriterArticlesPage() {
         <div className="mt-4 md:mt-0">
           <Link 
             to="/writer/articles/create" 
-            className={buttonVariants({ 
-              variant: "default", 
-              className: "flex items-center" 
-            })}
+            className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
           >
             <PlusCircle className="mr-2 h-4 w-4" />
             New Article
@@ -256,6 +236,7 @@ export default function WriterArticlesPage() {
         </AlertDescription>
       </Alert>
       
+      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Card className="md:col-span-1 border-none shadow-md bg-gradient-to-br from-indigo-50 to-white dark:from-gray-800 dark:to-gray-900">
           <CardHeader className="pb-2">
@@ -317,43 +298,41 @@ export default function WriterArticlesPage() {
         </Card>
       </div>
       
-      <div className="mb-8">
-        <Card className="border-none shadow-md">
-          <CardHeader>
-            <CardTitle>Wallet Status</CardTitle>
-            <CardDescription>Your current wallet balance for publishing articles</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-600 dark:text-gray-400">Current Balance:</p>
-                <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                  ₹{walletBalance?.toFixed(2) || '0.00'}
-                </p>
-              </div>
-              
-              <Button 
-                variant="outline" 
-                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-900/50"
-                onClick={() => navigate('/writer/wallet')}
-              >
-                Manage Wallet
-              </Button>
-            </div>
-            <Separator className="my-4" />
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              <p>
-                Publishing an article requires a fee of ₹150.00. 
-                {walletBalance !== null && walletBalance < 150
-                  ? ` You need ₹${(150 - walletBalance).toFixed(2)} more to publish.`
-                  : ' Your balance is sufficient for publishing!'
-                }
+      {/* Wallet Status Card */}
+      <Card className="border-none shadow-md mb-8">
+        <CardHeader>
+          <CardTitle>Wallet Status</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-600 dark:text-gray-400">Current Balance:</p>
+              <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                ₹{walletBalance?.toFixed(2) || '0.00'}
               </p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            
+            <Button 
+              variant="outline" 
+              className="border-indigo-300 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-400 dark:hover:bg-indigo-900/50"
+              onClick={() => navigate('/wallet')}
+            >
+              Manage Wallet
+            </Button>
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400 mt-4">
+            <p>
+              Publishing an article requires a fee of ₹150.00. 
+              {walletBalance !== null && walletBalance < 150
+                ? ` You need ₹${(150 - walletBalance).toFixed(2)} more to publish.`
+                : ' Your balance is sufficient for publishing!'
+              }
+            </p>
+          </div>
+        </CardContent>
+      </Card>
       
+      {/* Article Filters and List */}
       <div className="space-y-4">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full sm:w-auto">
@@ -396,164 +375,23 @@ export default function WriterArticlesPage() {
               }
             </p>
             {!searchTerm && (
-              <Link 
-                to="/writer/articles/create" 
-                className={buttonVariants({ 
-                  variant: "default", 
-                  className: "mt-4" 
-                })}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Create New Article
-              </Link>
+              <Button className="mt-4" asChild>
+                <Link to="/writer/articles/create">
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Create New Article
+                </Link>
+              </Button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredArticles.map((article) => (
-              <div key={article.id} className="relative">
-                <ArticleCard 
-                  article={article}
-                  variant="default"
-                  onRequestPublish={() => handleRequestPublish(article)}
-                />
-                
-                {/* Quick action buttons */}
-                <div className="absolute top-2 right-2 flex space-x-1">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8 rounded-full bg-white/80 dark:bg-gray-900/80 hover:bg-white dark:hover:bg-gray-900"
-                    onClick={() => navigate(`/articles/${article.slug}`)}
-                    title="View Article"
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8 rounded-full bg-white/80 dark:bg-gray-900/80 hover:bg-white dark:hover:bg-gray-900"
-                    onClick={() => navigate(`/writer/articles/edit/${article.slug}`)}
-                    title="Edit Article"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </Button>
-                  
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="h-8 w-8 rounded-full bg-white/80 dark:bg-gray-900/80 hover:bg-white dark:hover:bg-gray-900 text-red-500 hover:text-red-600"
-                    onClick={() => handleDeleteClick(article)}
-                    title="Delete Article"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                {/* Status badge */}
-                <div className="absolute bottom-2 left-2">
-                  {article.is_published ? (
-                    <Badge variant="default" className="bg-green-600">Published</Badge>
-                  ) : article.is_pending_publish ? (
-                    <div className="flex items-center gap-1">
-                      <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
-                        <Clock className="h-3 w-3 mr-1" />
-                        Pending Review
-                      </Badge>
-                    </div>
-                  ) : (
-                    <Badge variant="outline" className="bg-gray-100 text-gray-800">Draft</Badge>
-                  )}
-                </div>
-                
-                {/* Publish button for drafts */}
-                {!article.is_published && !article.is_pending_publish && (
-                  <div className="absolute bottom-2 right-2">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => handleRequestPublish(article)}
-                      className="bg-indigo-600 hover:bg-indigo-700"
-                    >
-                      <Send className="h-3 w-3 mr-1" />
-                      Publish
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <ArticleList
+            articles={filteredArticles}
+            isLoading={false}
+            onRequestPublish={handleRequestPublish}
+            variant="default"
+          />
         )}
       </div>
-      
-      {/* Publish Confirmation Dialog */}
-      <Dialog open={showPublishDialog} onOpenChange={setShowPublishDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Request to Publish Article</DialogTitle>
-            <DialogDescription>
-              Publishing an article requires a fee of ₹150.00 from your wallet balance.
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedArticle && (
-            <div className="space-y-4">
-              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
-                <p className="font-medium">Article: {selectedArticle.title}</p>
-                <p className="text-sm text-gray-500 mt-1">{selectedArticle.description.substring(0, 100)}...</p>
-              </div>
-              
-              <Alert className="bg-indigo-50 dark:bg-indigo-900/30 border-indigo-200 dark:border-indigo-800">
-                <Clock className="h-4 w-4 text-indigo-700 dark:text-indigo-400" />
-                <AlertTitle className="text-indigo-700 dark:text-indigo-400">Review Timeline</AlertTitle>
-                <AlertDescription className="text-indigo-600 dark:text-indigo-400">
-                  After your request, an admin will review and approve your article typically within 15 minutes.
-                </AlertDescription>
-              </Alert>
-              
-              <div className="flex justify-between items-center p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
-                <div>
-                  <p className="text-sm text-gray-500">Current Balance:</p>
-                  <p className="font-medium">{walletBalance !== null ? `₹${walletBalance.toFixed(2)}` : 'Loading...'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Publishing Fee:</p>
-                  <p className="font-medium">₹150.00</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Balance After:</p>
-                  <p className="font-medium">
-                    {walletBalance !== null 
-                      ? `₹${(walletBalance - 150).toFixed(2)}` 
-                      : 'Calculating...'
-                    }
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPublishDialog(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handlePublishConfirm} 
-              disabled={isSubmitting || (walletBalance !== null && walletBalance < 150)}
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
-                  Processing...
-                </>
-              ) : (
-                'Request Publish'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
