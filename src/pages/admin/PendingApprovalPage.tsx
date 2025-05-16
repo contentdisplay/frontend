@@ -1,316 +1,326 @@
-// pages/admin/AdminArticleApprovalPage.tsx
-
+// pages/admin/ArticleApprovalPage.tsx
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { AlertCircle, CheckCircle, Eye, Loader2, XCircle } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
 import articleService, { Article } from '@/services/articleService';
 import { motion } from 'framer-motion';
+import { format } from 'date-fns';
+import { 
+  Card, 
+  CardContent, 
+  CardFooter, 
+  CardHeader, 
+  CardTitle 
+} from '@/components/ui/card';
+import { 
+  ClipboardCheck, 
+  Clock, 
+  User, 
+  FileText, 
+  Tags, 
+  CheckCircle, 
+  XCircle, 
+  Loader2, 
+  Eye 
+} from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { Link, useNavigate } from 'react-router-dom';
 
-export default function AdminArticleApprovalPage() {
-  const navigate = useNavigate();
+export default function ArticleApprovalPage() {
   const [pendingArticles, setPendingArticles] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  const [showApproveDialog, setShowApproveDialog] = useState(false);
-  const [showRejectDialog, setShowRejectDialog] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeArticle, setActiveArticle] = useState<Article | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   useEffect(() => {
+    const fetchPendingArticles = async () => {
+      try {
+        setIsLoading(true);
+        const data = await articleService.getPendingArticles();
+        setPendingArticles(data);
+      } catch (error) {
+        console.error('Failed to fetch pending articles:', error);
+        toast.error('Failed to load pending articles');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     fetchPendingArticles();
   }, []);
 
-  const fetchPendingArticles = async () => {
+  const handleApprove = async (article: Article) => {
     try {
-      setIsLoading(true);
-      const data = await articleService.getPendingArticles();
-      setPendingArticles(data);
-    } catch (err) {
-      console.error('Failed to fetch pending articles:', err);
-      toast.error('Failed to fetch pending articles');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleApproveClick = (article: Article) => {
-    setSelectedArticle(article);
-    setShowApproveDialog(true);
-  };
-
-  const handleRejectClick = (article: Article) => {
-    setSelectedArticle(article);
-    setShowRejectDialog(true);
-  };
-
-  const handleApproveConfirm = async () => {
-    if (!selectedArticle) return;
-    
-    try {
-      setIsSubmitting(true);
-      await articleService.approveArticle(selectedArticle.slug);
-      toast.success('Article approved and published successfully');
-      
-      // Remove article from pending list
-      setPendingArticles(prev => 
-        prev.filter(article => article.id !== selectedArticle.id)
-      );
-      
-      setShowApproveDialog(false);
-    } catch (err) {
-      console.error('Failed to approve article:', err);
+      setActiveArticle(article);
+      setIsApproving(true);
+      await articleService.approveArticle(article.slug);
+      setPendingArticles(pendingArticles.filter(a => a.id !== article.id));
+      toast.success(`Article "${article.title}" approved and published`);
+    } catch (error) {
+      console.error('Failed to approve article:', error);
       toast.error('Failed to approve article');
     } finally {
-      setIsSubmitting(false);
+      setIsApproving(false);
+      setActiveArticle(null);
     }
   };
 
-  const handleRejectConfirm = async () => {
-    if (!selectedArticle) return;
-    
+  const handleReject = async (article: Article) => {
+    if (!rejectionReason.trim()) {
+      toast.error('Please provide a reason for rejection');
+      return;
+    }
+
     try {
-      setIsSubmitting(true);
-      // Implement rejection API call when available
-      // For now, just remove from pending list
-      setPendingArticles(prev => 
-        prev.filter(article => article.id !== selectedArticle.id)
-      );
-      
-      toast.success('Article rejected successfully');
-      setShowRejectDialog(false);
-    } catch (err) {
-      console.error('Failed to reject article:', err);
+      setActiveArticle(article);
+      setIsRejecting(true);
+      await articleService.rejectArticle(article.slug, rejectionReason);
+      setPendingArticles(pendingArticles.filter(a => a.id !== article.id));
+      toast.success(`Article "${article.title}" rejected`);
+      setRejectionReason('');
+    } catch (error) {
+      console.error('Failed to reject article:', error);
       toast.error('Failed to reject article');
     } finally {
-      setIsSubmitting(false);
+      setIsRejecting(false);
+      setActiveArticle(null);
     }
+  };
+
+  const formatDate = (dateString: string) => {
+    return format(new Date(dateString), 'MMMM dd, yyyy');
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 mb-2">
-            Pending Article Approvals
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            Review and approve submitted articles for publication
-          </p>
-        </div>
-        <div className="mt-4 md:mt-0">
-          <Button 
-            variant="outline" 
-            onClick={fetchPendingArticles}
-            className="flex items-center"
-          >
-            <svg 
-              className="mr-2 h-4 w-4" 
-              xmlns="http://www.w3.org/2000/svg" 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
-            >
-              // pages/admin/AdminArticleApprovalPage.tsx (continued)
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
-              />
-            </svg>
-            Refresh
-          </Button>
-        </div>
-      </div>
-
+    <div className="container mx-auto py-8 px-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <Card className="border-none shadow-lg bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900">
-          <CardHeader>
-            <CardTitle>Pending Articles</CardTitle>
-            <CardDescription>
-              Review articles submitted by content writers for publication
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="flex justify-center items-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-              </div>
-            ) : pendingArticles.length === 0 ? (
-              <div className="text-center py-12">
-                <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No pending articles</h3>
-                <p className="text-gray-500 dark:text-gray-400 mt-2">
-                  All submitted articles have been reviewed
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Author</TableHead>
-                      <TableHead>Submitted</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pendingArticles.map((article) => (
-                      <TableRow key={article.id}>
-                        <TableCell className="font-medium max-w-xs truncate">
-                          {article.title}
-                        </TableCell>
-                        <TableCell>{article.author}</TableCell>
-                        <TableCell>
-                          {new Date(article.created_at).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
-                            Pending
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => navigate(`/articles/${article.slug}`)}
-                            >
-                              <Eye className="h-4 w-4 mr-1" />
-                              View
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="text-green-600 border-green-600 hover:bg-green-50"
-                              onClick={() => handleApproveClick(article)}
-                            >
-                              <CheckCircle className="h-4 w-4 mr-1" />
-                              Approve
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              className="text-red-600 border-red-600 hover:bg-red-50"
-                              onClick={() => handleRejectClick(article)}
-                            >
-                              <XCircle className="h-4 w-4 mr-1" />
-                              Reject
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-2 flex items-center">
+              <ClipboardCheck className="mr-2 h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+              Article Approval Queue
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Review and approve writer submissions
+            </p>
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[1, 2, 3].map(i => (
+              <Card key={i} className="border-amber-100 dark:border-amber-900/30">
+                <CardHeader>
+                  <Skeleton className="h-4 w-3/4 mb-2" />
+                  <Skeleton className="h-10 w-full" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-3/4" />
+                </CardContent>
+                <CardFooter className="flex justify-end gap-2">
+                  <Skeleton className="h-10 w-24" />
+                  <Skeleton className="h-10 w-24" />
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        ) : pendingArticles.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pendingArticles.map(article => (
+              <Card 
+                key={article.id} 
+                className="border-amber-100 dark:border-amber-900/30"
+              >
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <Badge className="bg-amber-500 text-white">Pending</Badge>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      {formatDate(article.created_at)}
+                    </span>
+                  </div>
+                  <CardTitle className="text-xl font-bold mt-2">{article.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    <User className="mr-1 h-4 w-4" />
+                    <span className="mr-4">{article.author}</span>
+                    <FileText className="mr-1 h-4 w-4" />
+                    <span>{article.word_count} words</span>
+                  </div>
+                  <p className="text-gray-700 dark:text-gray-300 line-clamp-2 mb-2">
+                    {article.description}
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    <Tags className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-1" />
+                    {article.tags.slice(0, 3).map((tag, index) => (
+                      <Badge key={index} variant="outline" className="bg-gray-100 dark:bg-gray-800">
+                        {tag}
+                      </Badge>
                     ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    {article.tags.length > 3 && (
+                      <Badge variant="outline" className="bg-gray-100 dark:bg-gray-800">
+                        +{article.tags.length - 3}
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+                <CardFooter className="flex justify-between pt-2">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline">
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle className="text-2xl">{article.title}</DialogTitle>
+                        <DialogDescription>
+                          <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mt-2">
+                            <User className="mr-1 h-4 w-4" />
+                            <span className="mr-4">{article.author}</span>
+                            <Clock className="mr-1 h-4 w-4" />
+                            <span>{formatDate(article.created_at)}</span>
+                          </div>
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="mt-4">
+                        <h4 className="text-lg font-medium mb-2">Description:</h4>
+                        <p className="text-gray-700 dark:text-gray-300 mb-4">
+                          {article.description}
+                        </p>
+                        <h4 className="text-lg font-medium mb-2">Content:</h4>
+                        <div 
+                          className="prose max-w-none dark:prose-invert prose-headings:font-semibold prose-p:text-base prose-blockquote:border-l-indigo-600 prose-blockquote:text-gray-600 dark:prose-blockquote:border-l-indigo-400 dark:prose-blockquote:text-gray-400 prose-blockquote:not-italic"
+                          dangerouslySetInnerHTML={{ __html: article.content }}
+                        />
+                      </div>
+                      <DialogFooter className="mt-6">
+                        <Button variant="outline" onClick={() => {}}>
+                          Close
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                  <div className="flex gap-2">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" className="border-red-300 text-red-600">
+                          <XCircle className="mr-2 h-4 w-4" />
+                          Reject
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Reject Article</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to reject this article? This will return ₹75 to the author's wallet.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="py-4">
+                          <label className="text-sm font-medium">
+                            Reason for Rejection (will be sent to the author):
+                          </label>
+                          <Textarea
+                            value={rejectionReason}
+                            onChange={(e) => setRejectionReason(e.target.value)}
+                            className="mt-2"
+                            placeholder="Provide feedback on why this article was rejected..."
+                            rows={4}
+                          />
+                        </div>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel onClick={() => setRejectionReason('')}>
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction 
+                            onClick={() => handleReject(article)}
+                            disabled={isRejecting && activeArticle?.id === article.id}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            {isRejecting && activeArticle?.id === article.id ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Rejecting...
+                              </>
+                            ) : (
+                              'Reject Article'
+                            )}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                    <Button 
+                      onClick={() => handleApprove(article)}
+                      disabled={isApproving && activeArticle?.id === article.id}
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                    >
+                      {isApproving && activeArticle?.id === article.id ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Approving...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="mr-2 h-4 w-4" />
+                          Approve
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card className="border-dashed border-2 p-8 text-center">
+            <CardContent className="pt-6">
+              <CheckCircle className="h-16 w-16 text-emerald-400 mx-auto mb-4" />
+              <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">
+                No pending articles
+              </h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">
+                All submitted articles have been reviewed. Check back later for new submissions.
+              </p>
+              <Button asChild>
+                <Link to="/admin/dashboard">
+                  Return to Dashboard
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </motion.div>
-
-      {/* Approve Dialog */}
-      <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve Article</DialogTitle>
-            <DialogDescription>
-              The article will be published and made visible to all users.
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedArticle && (
-            <div className="space-y-4 my-4">
-              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
-                <h3 className="font-medium text-lg">{selectedArticle.title}</h3>
-                <p className="text-sm text-gray-500 mt-1">By {selectedArticle.author}</p>
-                <Separator className="my-2" />
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {selectedArticle.description}
-                </p>
-              </div>
-              
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                <p>This article has {selectedArticle.word_count} words and will be rewarded with ₹{selectedArticle.reward.toFixed(2)} per read.</p>
-                <p className="mt-1">The author has already paid the publishing fee of ₹150.00.</p>
-              </div>
-            </div>
-          )}
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowApproveDialog(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleApproveConfirm} 
-              disabled={isSubmitting}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
-                  Approving...
-                </>
-              ) : (
-                'Approve & Publish'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reject Dialog */}
-      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Article</DialogTitle>
-            <DialogDescription>
-              The article will be rejected and not published. The publishing fee will not be refunded.
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedArticle && (
-            <div className="space-y-4 my-4">
-              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
-                <h3 className="font-medium text-lg">{selectedArticle.title}</h3>
-                <p className="text-sm text-gray-500 mt-1">By {selectedArticle.author}</p>
-              </div>
-            </div>
-          )}
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleRejectConfirm} 
-              disabled={isSubmitting}
-              variant="destructive"
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
-                  Rejecting...
-                </>
-              ) : (
-                'Reject Article'
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

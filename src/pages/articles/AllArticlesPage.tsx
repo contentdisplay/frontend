@@ -1,541 +1,528 @@
-import React, { useEffect, useState } from 'react';
-import { Button, buttonVariants } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { toast } from 'sonner';
-import { AlertCircle, CheckCircle, Edit, Eye, Loader2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
-import articleService from '@/services/articleService';
-import { motion } from 'framer-motion';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
+// pages/articles/ArticlesListPage.tsx
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { 
+  Search, 
+  SlidersHorizontal, 
+  TrendingUp, 
+  Clock, 
+  Filter, 
+  Bookmark, 
+  Heart 
+} from 'lucide-react';
+import ArticleCard from '@/components/articles/ArticleCard';
+import { toast } from 'sonner';
+import articleService, { Article } from '@/services/articleService';
+import { motion } from 'framer-motion';
+import { 
+  Sheet, 
+  SheetContent, 
+  SheetDescription, 
+  SheetHeader, 
+  SheetTitle, 
+  SheetTrigger 
+} from '@/components/ui/sheet';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Link } from 'react-router-dom';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-interface Article {
-  id: number;
-  title: string;
-  slug: string;
-  content?: string;
-  author: { id?: number; username: string };
-  status: string;
-  created_at?: string;
-  updated_at?: string;
-  likes_count?: number;
-  bookmarks_count?: number;
-}
-
-interface ArticleFormData {
-  title: string;
-  content: string;
-  status: string;
-}
-
-export default function ContentManagementPage() {
+export default function ArticlesListPage() {
+  const navigate = useNavigate();
   const [articles, setArticles] = useState<Article[]>([]);
-  const [filteredArticles, setFilteredArticles] = useState<Article[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [trendingArticles, setTrendingArticles] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [articleToEdit, setArticleToEdit] = useState<Article | null>(null);
-  const [formData, setFormData] = useState<ArticleFormData>({
-    title: '',
-    content: '',
-    status: 'draft'
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState('latest');
+  const [bookmarkedArticles, setBookmarkedArticles] = useState<number[]>([]);
+  const [likedArticles, setLikedArticles] = useState<number[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalArticles, setTotalArticles] = useState(0);
+  const pageSize = 9;
+
+  // Filter states
+  const [tagFilter, setTagFilter] = useState<string>('');
+  const [sortBy, setSortBy] = useState<string>('latest');
+  const [activeTab, setActiveTab] = useState<string>('all');
 
   useEffect(() => {
-    fetchArticles();
-    
-    // Add error handling for common React issues
-    const handleError = (event: ErrorEvent) => {
-      console.error('Error caught by global handler:', event.error);
-      toast.error('An error occurred in the application. Please try again.');
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Fetch trending articles
+        const trendingData = await articleService.getTrendingArticles();
+        setTrendingArticles(trendingData);
+        
+        // Fetch regular articles with pagination
+        const { results, count } = await articleService.getPublishedArticles(currentPage, pageSize);
+        setArticles(results);
+        setTotalArticles(count);
+        setTotalPages(Math.ceil(count / pageSize));
+        
+        // Get bookmarked articles
+        const bookmarked = await articleService.getBookmarkedArticles();
+        setBookmarkedArticles(bookmarked.map(b => b.article));
+        
+        // Get liked articles
+        const liked = await articleService.getLikedArticles();
+        setLikedArticles(liked.map(l => l.article));
+      } catch (error) {
+        console.error('Failed to fetch articles:', error);
+        toast.error('Failed to load articles');
+      } finally {
+        setIsLoading(false);
+      }
     };
-    
-    window.addEventListener('error', handleError);
-    
-    return () => {
-      window.removeEventListener('error', handleError);
-    };
-  }, []);
 
-  // Filter articles when search term or status filter changes
-  useEffect(() => {
-    filterArticles();
-  }, [articles, searchTerm, filterStatus]);
+    fetchData();
+  }, [currentPage]);
 
-  const fetchArticles = async () => {
-    setIsLoading(true);
-    try {
-      const data = await articleService.getArticles();
-      console.log('Articles data:', data); // Debug logging
-      setArticles(data);
-    } catch (err) {
-      console.error('Error in fetchArticles:', err);
-      toast.error('Failed to fetch articles');
-      // Set empty array on error to prevent filter errors
-      setArticles([]);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    // Implement search functionality
+    toast.info(`Searching for: ${searchQuery}`);
+    // Reset to first page when searching
+    setCurrentPage(1);
+  };
+
+  const handleFilter = (filter: string) => {
+    setActiveFilter(filter);
+    setSortBy(filter);
+    // Reset to first page when changing filters
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (page: number) => {
+    if (page < 1 || page > totalPages) return;
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleArticleClick = (slug: string) => {
+    navigate(`/articles/${slug}`);
   };
 
   const filterArticles = () => {
-    // Ensure articles is an array before filtering
-    if (!Array.isArray(articles)) {
-      setFilteredArticles([]);
-      return;
-    }
-
     let filtered = [...articles];
     
-    // Filter by search term
-    if (searchTerm) {
+    // Apply tab filter
+    if (activeTab === 'bookmarked') {
+      filtered = filtered.filter(article => bookmarkedArticles.includes(article.id));
+    } else if (activeTab === 'liked') {
+      filtered = filtered.filter(article => likedArticles.includes(article.id));
+    }
+    
+    // Apply search filter
+    if (searchQuery) {
       filtered = filtered.filter(article => 
-        article?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        article?.author?.username?.toLowerCase().includes(searchTerm.toLowerCase())
+        article.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        article.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        article.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
       );
     }
     
-    // Filter by status
-    if (filterStatus !== 'all') {
-      filtered = filtered.filter(article => article?.status === filterStatus);
+    // Apply tag filter
+    if (tagFilter) {
+      filtered = filtered.filter(article => 
+        article.tags.some(tag => tag.toLowerCase() === tagFilter.toLowerCase())
+      );
     }
     
-    setFilteredArticles(filtered);
-  };
-
-  const handleUpdateStatus = async (id: number, status: string) => {
-    try {
-      await articleService.updateArticleStatus(id, status);
-      toast.success(`Article status updated to ${status}`);
-      
-      // Update article in local state
-      setArticles(prevArticles => 
-        prevArticles.map(article => 
-          article.id === id ? { ...article, status } : article
-        )
-      );
-    } catch (err) {
-      toast.error('Failed to update article status');
-      console.error(err);
-    }
-  };
-
-  const handleDeleteClick = (article: Article) => {
-    setArticleToDelete(article);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!articleToDelete) return;
-    
-    try {
-      await articleService.deleteArticle(articleToDelete.slug);
-      toast.success('Article deleted successfully');
-      
-      // Remove article from local state
-      setArticles(prevArticles => 
-        prevArticles.filter(article => article.id !== articleToDelete.id)
-      );
-      
-      setDeleteDialogOpen(false);
-    } catch (err) {
-      toast.error('Failed to delete article');
-      console.error(err);
-    }
-  };
-
-  const handleEditClick = (article: Article) => {
-    setArticleToEdit(article);
-    setFormData({
-      title: article.title,
-      content: article.content || '',
-      status: article.status
-    });
-    setEditDialogOpen(true);
-  };
-
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleStatusChange = (value: string) => {
-    setFormData(prev => ({ ...prev, status: value }));
-  };
-
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!articleToEdit) return;
-    
-    setIsSubmitting(true);
-    try {
-      await articleService.updateArticle(articleToEdit.slug, formData);
-      toast.success('Article updated successfully');
-      
-      // Update article in local state
-      setArticles(prevArticles => 
-        prevArticles.map(article => 
-          article.id === articleToEdit.id 
-            ? { 
-                ...article, 
-                title: formData.title, 
-                content: formData.content,
-                status: formData.status
-              } 
-            : article
-        )
-      );
-      
-      setEditDialogOpen(false);
-    } catch (err) {
-      toast.error('Failed to update article');
-      console.error(err);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'draft':
-        return <Badge variant="outline" className="bg-gray-100 text-gray-800">Draft</Badge>;
-      case 'pending':
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
-      case 'published':
-        return <Badge variant="outline" className="bg-green-100 text-green-800">Published</Badge>;
-      case 'rejected':
-        return <Badge variant="outline" className="bg-red-100 text-red-800">Rejected</Badge>;
+    // Apply sort
+    switch (sortBy) {
+      case 'trending':
+        filtered.sort((a, b) => b.normal_user_reads - a.normal_user_reads);
+        break;
+      case 'rewards':
+        filtered.sort((a, b) => b.reward - a.reward);
+        break;
+      case 'most-liked':
+        filtered.sort((a, b) => b.likes_count - a.likes_count);
+        break;
+      case 'latest':
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        // Already sorted by latest from the API
+        break;
     }
+    
+    return filtered;
   };
 
-  // Animation variants for the container
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: { 
-      opacity: 1,
-      transition: { 
-        staggerChildren: 0.1
-      }
-    }
+  // Get all unique tags from articles
+  const getAllTags = () => {
+    const tagsSet = new Set<string>();
+    articles.forEach(article => {
+      article.tags.forEach(tag => tagsSet.add(tag.toLowerCase()));
+    });
+    return Array.from(tagsSet).sort();
   };
-
-  // Animation variants for each card
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { 
-      opacity: 1, 
-      y: 0,
-      transition: { duration: 0.3 }
+  
+  // Calculate pagination range
+  const getPaginationRange = () => {
+    const range = [];
+    const maxPagesToShow = 5;
+    
+    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+    
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
     }
+    
+    for (let i = startPage; i <= endPage; i++) {
+      range.push(i);
+    }
+    
+    return range;
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-indigo-600 mb-2">
-            Content Management
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            Manage, review, and publish articles
-          </p>
-        </div>
-        <div className="mt-4 md:mt-0 flex items-center space-x-2">
-          <Button 
-            onClick={fetchArticles} 
-            variant="outline" 
-            size="sm" 
-            className="flex items-center"
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-          <Link 
-            to="/articles/create" 
-            className={buttonVariants({ variant: "default", size: "sm", className: "flex items-center" })}
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            New Article
-          </Link>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <Card className="border-none shadow-md bg-gradient-to-br from-indigo-50 to-white dark:from-gray-800 dark:to-gray-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Total Articles</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{Array.isArray(articles) ? articles.length : 0}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-none shadow-md bg-gradient-to-br from-green-50 to-white dark:from-gray-800 dark:to-gray-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Published</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{Array.isArray(articles) ? articles.filter(a => a?.status === 'published').length : 0}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-none shadow-md bg-gradient-to-br from-yellow-50 to-white dark:from-gray-800 dark:to-gray-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Pending</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{Array.isArray(articles) ? articles.filter(a => a?.status === 'pending').length : 0}</p>
-          </CardContent>
-        </Card>
-        <Card className="border-none shadow-md bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Drafts</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">{Array.isArray(articles) ? articles.filter(a => a?.status === 'draft').length : 0}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="border-none shadow-lg bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900">
-        <CardHeader>
-          <CardTitle className="text-xl">Articles</CardTitle>
-          <CardDescription>
-            Manage all articles in the system
-          </CardDescription>
-          <div className="flex flex-col sm:flex-row gap-4 mt-4">
-            <div className="relative flex-grow">
-              <Input
-                placeholder="Search by title or author..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" 
-                fill="none" 
-                viewBox="0 0 24 24" 
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="published">Published</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
+    <div className="container mx-auto py-8 px-4">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-2">
+              Explore Articles
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Discover insights, earn rewards, and engage with content
+            </p>
           </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex justify-center items-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-            </div>
-          ) : filteredArticles.length === 0 ? (
-            <div className="text-center py-12">
-              <AlertCircle className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">No articles found</h3>
-              <p className="text-gray-500 dark:text-gray-400 mt-2">
-                {searchTerm || filterStatus !== 'all' 
-                  ? "Try adjusting your search or filter criteria"
-                  : "Start by creating a new article"}
-              </p>
-            </div>
-          ) : (
-            <motion.div
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-              className="overflow-x-auto"
-            >
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Author</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredArticles.map((article) => (
-                    <motion.tr key={article.id} variants={itemVariants}>
-                      <TableCell className="font-medium">{article.title}</TableCell>
-                      <TableCell>{article.author.username}</TableCell>
-                      <TableCell>{getStatusBadge(article.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Link to={`/articles/${article.slug}`}>
-                            <Button variant="ghost" size="icon" title="View">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </Link>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleEditClick(article)} 
-                            title="Edit"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            onClick={() => handleDeleteClick(article)} 
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                          
-                          {article.status === 'draft' && (
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleUpdateStatus(article.id, 'pending')}
-                            >
-                              Send for Review
-                            </Button>
-                          )}
-                          
-                          {article.status === 'pending' && (
-                            <div className="flex gap-2">
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                className="text-green-600 border-green-600 hover:bg-green-50"
-                                onClick={() => handleUpdateStatus(article.id, 'published')}
-                              >
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                Approve
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                className="text-red-600 border-red-600 hover:bg-red-50"
-                                onClick={() => handleUpdateStatus(article.id, 'rejected')}
-                              >
-                                <XCircle className="h-4 w-4 mr-1" />
-                                Reject
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                    </motion.tr>
-                  ))}
-                </TableBody>
-              </Table>
-            </motion.div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Delete</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete "{articleToDelete?.title}"? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex justify-between">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Article Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Edit Article</DialogTitle>
-            <DialogDescription>
-              Make changes to the article details below.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleEditSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleFormChange}
-                  placeholder="Article title"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="content">Content</Label>
-                <Textarea
-                  id="content"
-                  name="content"
-                  value={formData.content}
-                  onChange={handleFormChange}
-                  placeholder="Article content"
-                  rows={8}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="status">Status</Label>
-                <Select value={formData.status} onValueChange={handleStatusChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="pending">Pending Review</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" type="button" onClick={() => setEditDialogOpen(false)}>
-                Cancel
+          
+          <div className="w-full md:w-auto">
+            <form onSubmit={handleSearch} className="flex gap-2">
+              <Input 
+                placeholder="Search articles..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full md:w-64"
+              />
+              <Button type="submit">
+                <Search className="h-4 w-4" />
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Changes'
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="outline">
+                    <SlidersHorizontal className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent>
+                  <SheetHeader>
+                    <SheetTitle>Filter Articles</SheetTitle>
+                    <SheetDescription>
+                      Customize your article feed
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="py-4 space-y-4">
+                    <div className="space-y-2">
+                      <Label>Sort By</Label>
+                      <Select value={sortBy} onValueChange={setSortBy}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select sort option" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="latest">Latest</SelectItem>
+                          <SelectItem value="trending">Most Read</SelectItem>
+                          <SelectItem value="rewards">Highest Rewards</SelectItem>
+                          <SelectItem value="most-liked">Most Liked</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Filter by Tag</Label>
+                      <Select value={tagFilter} onValueChange={setTagFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a tag" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">All Tags</SelectItem>
+                          {getAllTags().map(tag => (
+                            <SelectItem key={tag} value={tag}>
+                              {tag}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button 
+                      onClick={() => {
+                        setSortBy('latest');
+                        setTagFilter('');
+                        setSearchQuery('');
+                      }}
+                      variant="outline"
+                      className="w-full mt-4"
+                    >
+                      Reset Filters
+                    </Button>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </form>
+          </div>
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          <Button
+            variant={activeFilter === 'latest' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleFilter('latest')}
+            className={activeFilter === 'latest' ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
+          >
+            <Clock className="mr-1 h-4 w-4" />
+            Latest
+          </Button>
+          <Button
+            variant={activeFilter === 'trending' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleFilter('trending')}
+            className={activeFilter === 'trending' ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
+          >
+            <TrendingUp className="mr-1 h-4 w-4" />
+            Trending
+          </Button>
+          <Button
+            variant={activeFilter === 'rewards' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleFilter('rewards')}
+            className={activeFilter === 'rewards' ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
+          >
+            <Filter className="mr-1 h-4 w-4" />
+            Highest Rewards
+          </Button>
+          <Button
+            variant={activeFilter === 'most-liked' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => handleFilter('most-liked')}
+            className={activeFilter === 'most-liked' ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
+          >
+            <Heart className="mr-1 h-4 w-4" />
+            Most Liked
+          </Button>
+        </div>
+
+        {/* Trending Section */}
+        {!isLoading && trendingArticles.length > 0 && (
+          <div className="mb-10">
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+                Trending Articles
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {trendingArticles.slice(0, 3).map(article => (
+                <ArticleCard
+                  key={article.id}
+                  article={article}
+                  isBookmarked={bookmarkedArticles.includes(article.id)}
+                  isLiked={likedArticles.includes(article.id)}
+                  setBookmarkedArticles={setBookmarkedArticles}
+                  setLikedArticles={setLikedArticles}
+                  onClick={() => handleArticleClick(article.slug)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Main Articles Section */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+          <TabsList>
+            <TabsTrigger value="all">All Articles</TabsTrigger>
+            <TabsTrigger value="bookmarked">
+              <Bookmark className="mr-1 h-4 w-4" />
+              Bookmarked
+            </TabsTrigger>
+            <TabsTrigger value="liked">
+              <Heart className="mr-1 h-4 w-4" />
+              Liked
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value={activeTab} className="mt-4">
+            {/* Active Filters Display */}
+            {(tagFilter || searchQuery) && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                {searchQuery && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    Search: {searchQuery}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-4 w-4 ml-1 rounded-full"
+                      onClick={() => setSearchQuery('')}
+                    >
+                      &times;
+                    </Button>
+                  </Badge>
                 )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+                {tagFilter && (
+                  <Badge variant="secondary" className="flex items-center gap-1">
+                    Tag: {tagFilter}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-4 w-4 ml-1 rounded-full"
+                      onClick={() => setTagFilter('')}
+                    >
+                      &times;
+                    </Button>
+                  </Badge>
+                )}
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-sm h-6"
+                  onClick={() => {
+                    setTagFilter('');
+                    setSearchQuery('');
+                  }}
+                >
+                  Clear All
+                </Button>
+              </div>
+            )}
+            
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[1, 2, 3, 4, 5, 6].map(i => (
+                  <div key={i} className="border rounded-lg overflow-hidden">
+                    <Skeleton className="h-48 w-full" />
+                    <div className="p-4 space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : filterArticles().length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filterArticles().map(article => (
+                  <ArticleCard
+                    key={article.id}
+                    article={article}
+                    isBookmarked={bookmarkedArticles.includes(article.id)}
+                    isLiked={likedArticles.includes(article.id)}
+                    setBookmarkedArticles={setBookmarkedArticles}
+                    setLikedArticles={setLikedArticles}
+                    onClick={() => handleArticleClick(article.slug)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-12 border rounded-lg">
+                <Filter className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-xl font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  No articles found
+                </h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">
+                  {activeTab === 'bookmarked' 
+                    ? "You haven't bookmarked any articles yet" 
+                    : activeTab === 'liked' 
+                      ? "You haven't liked any articles yet" 
+                      : "No articles match your current filters"}
+                </p>
+                <Button 
+                  onClick={() => {
+                    setTagFilter('');
+                    setSearchQuery('');
+                    setActiveTab('all');
+                    setSortBy('latest');
+                  }}
+                  variant="outline"
+                >
+                  Clear Filters
+                </Button>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+
+        {/* Pagination */}
+        {!isLoading && activeTab === 'all' && filterArticles().length > 0 && totalPages > 1 && (
+          <Pagination className="mt-8">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious 
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+              
+              {currentPage > 2 && (
+                <PaginationItem>
+                  <PaginationLink onClick={() => handlePageChange(1)}>1</PaginationLink>
+                </PaginationItem>
+              )}
+              
+              {currentPage > 3 && (
+                <PaginationItem>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              )}
+              
+              {getPaginationRange().map(page => (
+                <PaginationItem key={page}>
+                  <PaginationLink 
+                    isActive={page === currentPage}
+                    onClick={() => handlePageChange(page)}
+                  >
+                    {page}
+                  </PaginationLink>
+                </PaginationItem>
+              ))}
+              
+              {currentPage < totalPages - 2 && (
+                <PaginationItem>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              )}
+              
+              {currentPage < totalPages - 1 && (
+                <PaginationItem>
+                  <PaginationLink onClick={() => handlePageChange(totalPages)}>
+                    {totalPages}
+                  </PaginationLink>
+                </PaginationItem>
+              )}
+              
+              <PaginationItem>
+                <PaginationNext 
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        )}
+      </motion.div>
     </div>
   );
 }

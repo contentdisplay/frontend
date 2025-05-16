@@ -3,7 +3,20 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Heart, Share, Bookmark, Clock, Tag, Wallet, User, Loader2, Edit, Trash } from 'lucide-react';
+import { 
+  ArrowLeft, 
+  Heart, 
+  Share, 
+  Bookmark, 
+  Clock, 
+  Tag, 
+  Wallet, 
+  User, 
+  Loader2, 
+  Edit, 
+  Trash,
+  Info
+} from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
@@ -13,8 +26,21 @@ import { format } from 'date-fns';
 import { Progress } from '@/components/ui/progress';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle 
+} from '@/components/ui/dialog';
 import { ArticleRewardSection } from '@/components/articles/ArticleRewardSection';
+import { 
+  Tooltip, 
+  TooltipContent, 
+  TooltipProvider, 
+  TooltipTrigger 
+} from '@/components/ui/tooltip';
 
 export default function ArticleDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -34,6 +60,7 @@ export default function ArticleDetailPage() {
   const [isRewardClaimed, setIsRewardClaimed] = useState(false);
   const [isClaimingReward, setIsClaimingReward] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [multiplier, setMultiplier] = useState(1.0);
   const contentRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -55,6 +82,16 @@ export default function ArticleDetailPage() {
         // Check if reward is already claimed
         const hasCollected = await checkRewardStatus(data);
         setIsRewardClaimed(hasCollected);
+        
+        // Get user's multiplier from wallet
+        try {
+          const userProfile = await walletService.getUserProfile();
+          if (userProfile && userProfile.multiplier) {
+            setMultiplier(userProfile.multiplier);
+          }
+        } catch (err) {
+          console.error('Error fetching user profile:', err);
+        }
       } catch (error) {
         console.error('Failed to fetch article:', error);
         setError('Article not found or has been removed.');
@@ -75,7 +112,7 @@ export default function ArticleDetailPage() {
   const checkRewardStatus = async (article: Article) => {
     try {
       const response = await articleService.collectReward(article.slug, 0);
-      return response.detail.includes('already collected');
+      return false; // This should not succeed
     } catch (error: any) {
       if (error.detail && error.detail.includes('already collected')) {
         return true;
@@ -293,7 +330,7 @@ export default function ArticleDetailPage() {
           <Progress
             value={readingProgress}
             className="h-1 bg-gray-200 dark:bg-gray-700"
-            indicatorClassName="bg-amber-400"
+            indicatorClassName="bg-gradient-to-r from-amber-400 to-orange-500"
           />
         </div>
 
@@ -347,7 +384,7 @@ export default function ArticleDetailPage() {
             <div className="text-center">
               <Button
                 onClick={handleStartReading}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white"
               >
                 Start Reading
               </Button>
@@ -372,69 +409,113 @@ export default function ArticleDetailPage() {
             dangerouslySetInnerHTML={{ __html: article.content }}
           />
 
-          <div className="flex justify-between items-center border-t border-b py-4 border-gray-200 dark:border-gray-700">
+          <div className="flex flex-wrap justify-between items-center border-t border-b py-4 border-gray-200 dark:border-gray-700 gap-y-4">
             <div className="flex space-x-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleLike}
-                className={isLiked ? 'text-red-500' : 'text-gray-600 dark:text-gray-400'}
-              >
-                <Heart className={`mr-1 h-4 w-4 ${isLiked ? 'fill-current' : ''}`} />
-                <span>{likesCount} Likes</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleBookmark}
-                className={isBookmarked ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-400'}
-              >
-                <Bookmark className={`mr-1 h-4 w-4 ${isBookmarked ? 'fill-current' : ''}`} />
-                <span>{bookmarksCount} Saves</span>
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleShare}
-                className="text-gray-600 dark:text-gray-400"
-              >
-                <Share className="mr-1 h-4 w-4" />
-                <span>Share</span>
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleLike}
+                      className={isLiked ? 'text-red-500' : 'text-gray-600 dark:text-gray-400'}
+                    >
+                      <Heart className={`mr-1 h-4 w-4 ${isLiked ? 'fill-current' : ''}`} />
+                      <span>{likesCount} Likes</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{isLiked ? 'Unlike this article' : 'Like this article'}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleBookmark}
+                      className={isBookmarked ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-400'}
+                    >
+                      <Bookmark className={`mr-1 h-4 w-4 ${isBookmarked ? 'fill-current' : ''}`} />
+                      <span>{bookmarksCount} Saves</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{isBookmarked ? 'Remove from bookmarks' : 'Add to bookmarks'}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleShare}
+                      className="text-gray-600 dark:text-gray-400"
+                    >
+                      <Share className="mr-1 h-4 w-4" />
+                      <span>Share</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Share this article</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
             {!isOwnArticle && (
-              <Button
-                variant={isReadingComplete ? 'default' : 'outline'}
-                size="sm"
-                onClick={handleClaimReward}
-                disabled={!isReadingComplete || isRewardClaimed || isClaimingReward}
-                className={
-                  isReadingComplete && !isRewardClaimed
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white animate-pulse'
-                    : 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
-                }
-              >
-                {isClaimingReward ? (
-                  <>
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    <span>Claiming...</span>
-                  </>
-                ) : isRewardClaimed ? (
-                  <>
-                    <Wallet className="mr-1 h-4 w-4" />
-                    <span>Reward Claimed</span>
-                  </>
-                ) : (
-                  <>
-                    <Wallet className="mr-1 h-4 w-4" />
-                    <span>
-                      {isReadingComplete
-                        ? `Claim ₹${article.reward.toFixed(2)} Reward`
-                        : `Read to earn ₹${article.reward.toFixed(2)}`}
-                    </span>
-                  </>
-                )}
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={isReadingComplete ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={handleClaimReward}
+                      disabled={!isReadingComplete || isRewardClaimed || isClaimingReward}
+                      className={
+                        isReadingComplete && !isRewardClaimed
+                          ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white animate-pulse'
+                          : 'border-emerald-600 text-emerald-600 dark:border-emerald-400 dark:text-emerald-400'
+                      }
+                    >
+                      {isClaimingReward ? (
+                        <>
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                          <span>Claiming...</span>
+                        </>
+                      ) : isRewardClaimed ? (
+                        <>
+                          <Wallet className="mr-1 h-4 w-4" />
+                          <span>Reward Claimed</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wallet className="mr-1 h-4 w-4" />
+                          <span>
+                            {isReadingComplete
+                              ? `Claim ₹${(article.reward * multiplier).toFixed(2)} Reward`
+                              : `Read to earn ₹${(article.reward * multiplier).toFixed(2)}`}
+                          </span>
+                        </>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>
+                      {isRewardClaimed 
+                        ? 'You have already claimed the reward for this article' 
+                        : isReadingComplete 
+                          ? 'Claim your reward for reading this article' 
+                          : 'Complete reading to earn rewards'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
 
@@ -447,7 +528,38 @@ export default function ArticleDetailPage() {
               isRewardClaimed={isRewardClaimed}
               isClaimingReward={isClaimingReward}
               onClaimReward={handleClaimReward}
+              multiplier={multiplier}
             />
+          )}
+
+          {/* Article stats for authors */}
+          {isOwnArticle && (
+            <Card className="bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <h3 className="text-lg font-semibold text-blue-800 dark:text-blue-300">Article Statistics</h3>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Reads</p>
+                    <p className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{article.normal_user_reads}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Likes</p>
+                    <p className="text-xl font-bold text-rose-600 dark:text-rose-400">{likesCount}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Bookmarks</p>
+                    <p className="text-xl font-bold text-amber-600 dark:text-amber-400">{bookmarksCount}</p>
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Rewards Claimed</p>
+                    <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{article.rewards_collected}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           )}
         </article>
 

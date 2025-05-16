@@ -83,6 +83,31 @@ export default function WriterArticlesPage() {
       setIsLoading(false);
     }
   };
+  const fetchArticles = async () => {
+    try {
+      setIsLoading(true);
+      // Try to get the data from the writer articles endpoint
+      const data = await articleService.getAllWriterArticles();
+      setArticles(data);
+      
+      // If analytics fails, at least we have the articles
+      try {
+        // Try to get analytics data, but don't block loading if it fails
+        const analytics = await articleService.getArticleAnalytics();
+        console.log('Article analytics loaded:', analytics);
+        // You could use this data to enhance the UI if needed
+      } catch (analyticsError) {
+        console.warn('Failed to load analytics, but articles loaded successfully:', analyticsError);
+        // Continue without analytics data
+      }
+    } catch (err: any) {
+      console.error('Failed to fetch articles:', err);
+      setError(err.response?.data?.detail || 'Failed to load articles');
+      toast.error('Failed to load your articles');
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const loadWalletInfo = async () => {
     try {

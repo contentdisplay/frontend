@@ -36,18 +36,23 @@ export default function AdminLayout() {
       path: "/admin/dashboard",
     },
     {
+      icon: LayoutDashboard,
+      label: "Manage User Dashboard",
+      path: "/admin/userdashboard",
+    },
+    {
       icon: Users,
       label: "Users",
       path: "/admin/users",
     },
     {
       icon: FileText,
-      label: "Content",
+      label: "Manage Articles",
       path: "/admin/content",
     },
     {
       icon: FileText,
-      label: "Pending Approvals",
+      label: "Pending Articles",
       path: "/admin/approvals",
     },
     {

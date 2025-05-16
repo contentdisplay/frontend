@@ -1,4 +1,4 @@
-// src/App.tsx
+// src/App.tsx (updated routes)
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -33,9 +33,10 @@ import WalletPage from './pages/wallet/WalletPage';
 import NotificationsPage from './pages/notification/NotificationPage';
 
 // Writer Pages
-import ArticleFormPage from './components/articles/ArticleForm';
+import ArticleCreatePage from './pages/articles/ArticleCreatePage'; // Import the correct component
+import ArticleEditPage from './pages/articles/EditArticlePage'; // Import the edit component
 import WriterRequestPage from './pages/promotion/WriterRequestPage';
-import WriterArticlesPage from './pages/articles/WriterArticlePage';
+import WriterArticlePage from './pages/articles/WriterArticlePage';
 
 // Admin Pages
 import UsersManagementPage from './pages/admin/UsersManagementPage';
@@ -43,14 +44,15 @@ import ContentManagementPage from './pages/admin/ContentManagementPage';
 import PendingApprovalsPage from './pages/admin/PendingApprovalPage';
 import PromotionRequestsPage from './pages/admin/PromotionRequestPage';
 import NotificationManagementPage from './pages/admin/NotificationManagementPage';
+import ManageUserDashboardPage from './pages/admin/ManageUserDashboardPage';
 import WalletQRManagement from './components/admin/WalletQRManagement';
 import PaymentRequests from './components/admin/PaymentRequest';
 import { ErrorBoundary } from '@/components/admin/ErrorBoundary';
 
+
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
 import NotFound from './pages/NotFound';
-import WriterArticlePage from './pages/articles/WriterArticlePage';
 
 const queryClient = new QueryClient();
 
@@ -99,8 +101,10 @@ const App = () => (
                 }
               >
                 <Route path="dashboard" element={<WriterDashboard />} />
-                <Route path="articles/create" element={<ArticleFormPage mode="create" />} />
-                <Route path="articles/edit/:slug" element={<ArticleFormPage mode="edit" />} />
+                {/* Use the updated ArticleCreatePage component */}
+                <Route path="articles/create" element={<ArticleCreatePage />} />
+                {/* Use the ArticleEditPage component for editing */}
+                <Route path="articles/edit/:slug" element={<ArticleEditPage />} />
                 <Route path="articles" element={<WriterArticlePage />} />
                 <Route path="wallet" element={<WalletPage />} />
                 <Route path="notifications" element={<NotificationsPage />} />
@@ -122,6 +126,7 @@ const App = () => (
                 <Route path="approvals" element={<PendingApprovalsPage />} />
                 <Route path="promotions" element={<PromotionRequestsPage />} />
                 <Route path="notifications" element={<NotificationManagementPage />} />
+                <Route path="userdashboard" element={<ManageUserDashboardPage/>}/>
                 <Route
                   path="wallet-qr"
                   element={
