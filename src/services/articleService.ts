@@ -1,3 +1,4 @@
+// services/articleService.ts
 import api from './api';
 
 export interface Article {
@@ -5,7 +6,7 @@ export interface Article {
   title: string;
   slug: string;
   content: string;
-  author: string;
+  author: number;
   author_name: string;
   thumbnail?: string;
   tags: string[];
@@ -53,12 +54,71 @@ export interface WalletBalanceResponse {
   has_sufficient_balance: boolean;
 }
 
+export interface ArticleReadingState {
+  start_time: string;
+  is_rewarded: boolean;
+}
+
 const articleService = {
-  getPublishedArticles: async (): Promise<Article[]> => {
+  getPublishedArticles: async (page = 1, pageSize = 10): Promise<{results: Article[], count: number}> => {
     try {
       console.log('Calling getPublishedArticles API endpoint');
-      const response = await api.get('/articles/');
+      const response = await api.get('/articles/', {
+        params: {
+          page,
+          page_size: pageSize
+        }
+      });
       console.log('API Response from getPublishedArticles:', response);
+      
+      let articles: Article[] = [];
+      let count = 0;
+      
+      if (Array.isArray(response.data)) {
+        articles = response.data;
+        count = response.data.length;
+      } else if (response.data && typeof response.data === 'object') {
+        if (Array.isArray(response.data.results)) {
+          articles = response.data.results;
+          count = response.data.count || articles.length;
+        } else if (Array.isArray(response.data.data)) {
+          articles = response.data.data;
+          count = response.data.count || articles.length;
+        }
+      }
+      
+      return {
+        results: articles.map(article => ({
+          ...article,
+          likes_count: article.total_likes || 0,
+          bookmarks_count: article.total_bookmarks || 0,
+          is_bookmarked: article.is_bookmarked || false,
+          is_liked: article.is_liked || false,
+          tags: article.tags || [],
+          reward: article.reward || 0,
+          word_count: article.word_count || 0,
+          is_published: article.status === 'published',
+          is_pending_publish: article.status === 'pending',
+          content: article.content || ''
+        })),
+        count
+      };
+    } catch (error) {
+      console.error('Failed to fetch published articles:', error);
+      return { results: [], count: 0 };
+    }
+  },
+
+  getTrendingArticles: async (): Promise<Article[]> => {
+    try {
+      // This is a placeholder - your API might have a dedicated endpoint for trending articles
+      // or you might need to sort the results from getPublishedArticles by total_reads
+      const response = await api.get('/articles/', {
+        params: {
+          sort_by: 'total_reads',
+          limit: 3
+        }
+      });
       
       let articles: Article[] = [];
       
@@ -86,7 +146,77 @@ const articleService = {
         content: article.content || ''
       }));
     } catch (error) {
-      console.error('Failed to fetch published articles:', error);
+      console.error('Failed to fetch trending articles:', error);
+      return [];
+    }
+  },
+
+  getBookmarkedArticles: async (): Promise<{article: number}[]> => {
+    try {
+      // Get the user's bookmarked articles
+      // This endpoint should return something like {data: [{article: 1}, {article: 2}]}
+      // or might return full article objects depending on your API
+      const response = await api.get('/user/bookmarks/');
+      
+      // If the API returns full article objects, map them to just the IDs
+      if (response.data && Array.isArray(response.data)) {
+        if (response.data.length > 0 && typeof response.data[0].article === 'number') {
+          return response.data;
+        } else {
+          // If the API returns full article objects
+          return response.data.map((article: any) => ({ article: article.id }));
+        }
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch bookmarked articles:', error);
+      // Handle the 404 case by providing a fallback
+      if ((error as any)?.response?.status === 404) {
+        console.log('Bookmarks endpoint not found, using local alternative');
+        // If the API endpoint is not available, look up the articles with is_bookmarked=true
+        const articlesResponse = await api.get('/articles/');
+        const articles = Array.isArray(articlesResponse.data) 
+          ? articlesResponse.data 
+          : (articlesResponse.data?.results || []);
+          
+        return articles
+          .filter((article: Article) => article.is_bookmarked)
+          .map((article: Article) => ({ article: article.id }));
+      }
+      return [];
+    }
+  },
+
+  getLikedArticles: async (): Promise<{article: number}[]> => {
+    try {
+      // Get the user's liked articles
+      const response = await api.get('/user/likes/');
+      
+      // If the API returns full article objects, map them to just the IDs
+      if (response.data && Array.isArray(response.data)) {
+        if (response.data.length > 0 && typeof response.data[0].article === 'number') {
+          return response.data;
+        } else {
+          // If the API returns full article objects
+          return response.data.map((article: any) => ({ article: article.id }));
+        }
+      }
+      return [];
+    } catch (error) {
+      console.error('Failed to fetch liked articles:', error);
+      // Handle the 404 case by providing a fallback
+      if ((error as any)?.response?.status === 404) {
+        console.log('Likes endpoint not found, using local alternative');
+        // If the API endpoint is not available, look up the articles with is_liked=true
+        const articlesResponse = await api.get('/articles/');
+        const articles = Array.isArray(articlesResponse.data) 
+          ? articlesResponse.data 
+          : (articlesResponse.data?.results || []);
+          
+        return articles
+          .filter((article: Article) => article.is_liked)
+          .map((article: Article) => ({ article: article.id }));
+      }
       return [];
     }
   },
@@ -182,9 +312,12 @@ const articleService = {
     }
   },
 
-  toggleLike: async (slug: string): Promise<any> => {
+  // Updated to match backend API with article in request body
+  toggleLike: async (articleId: number): Promise<any> => {
     try {
-      const response = await api.post(`/articles/${slug}/like/`, {}, {
+      const response = await api.post(`/articles/${articleId}/like/`, {
+        article: articleId
+      }, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
       });
       console.log('Like toggled:', response.data);
@@ -195,15 +328,69 @@ const articleService = {
     }
   },
 
-  toggleBookmark: async (slug: string): Promise<any> => {
+  // Updated to match backend API with article in request body
+  toggleBookmark: async (articleId: number): Promise<any> => {
     try {
-      const response = await api.post(`/articles/${slug}/bookmark/`, {}, {
+      const response = await api.post(`/articles/${articleId}/bookmark/`, {
+        article: articleId
+      }, {
         headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
       });
       console.log('Bookmark toggled:', response.data);
       return response.data;
     } catch (error) {
       console.error("Bookmark article error:", error);
+      throw error;
+    }
+  },
+
+  // New methods to match your backend API
+  startReading: async (articleId: number): Promise<ArticleReadingState> => {
+    try {
+      const response = await api.post(`/articles/${articleId}/read/`, {}, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      console.log('Started reading article:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Start reading article error:", error);
+      
+      // If there's an error, provide a default reading state to avoid breaking the UI
+      const defaultReadingState = {
+        start_time: new Date().toISOString(),
+        is_rewarded: false
+      };
+      
+      // Check if article isn't published
+      if ((error as any)?.response?.status === 400 && 
+          (error as any)?.response?.data?.detail?.includes('Article not published')) {
+        throw new Error('This article is not published and cannot be read at this time.');
+      }
+      
+      return defaultReadingState;
+    }
+  },
+
+  collectReward: async (articleId: number): Promise<any> => {
+    try {
+      const response = await api.post(`/articles/${articleId}/collect/`, {}, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      console.log('Reward collected:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Collect reward error:", error);
+      
+      const errorObj = error as any;
+      const errorMessage = errorObj?.response?.data?.detail || 'Failed to collect reward';
+      
+      // Customize error messages for better user experience
+      if (errorMessage.includes('Must read for at least 15 minutes')) {
+        throw new Error('You need to read the article for the minimum required time to claim the reward.');
+      } else if (errorMessage.includes('Reward already collected')) {
+        throw new Error('You have already claimed the reward for this article.');
+      }
+      
       throw error;
     }
   },
@@ -260,4 +447,4 @@ const articleService = {
   }
 };
 
-export default articleService;  
+export default articleService;

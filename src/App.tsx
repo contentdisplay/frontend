@@ -37,11 +37,12 @@ import ArticleCreatePage from './pages/articles/ArticleCreatePage'; // Import th
 import ArticleEditPage from './pages/articles/EditArticlePage'; // Import the edit component
 import WriterRequestPage from './pages/promotion/WriterRequestPage';
 import WriterArticlePage from './pages/articles/WriterArticlePage';
+import WriterArticleDetailPage from './pages/articles/WriterArticleDetailPage';
 
 // Admin Pages
 import UsersManagementPage from './pages/admin/UsersManagementPage';
-import ContentManagementPage from './pages/admin/ContentManagementPage';
-import PendingApprovalsPage from './pages/admin/PendingApprovalPage';
+import ArticlesManagementPage from './pages/admin/ArticlesManagementPage';
+import ArticlesApprovalsPage from './pages/admin/ArticlesApprovalPage';
 import PromotionRequestsPage from './pages/admin/PromotionRequestPage';
 import NotificationManagementPage from './pages/admin/NotificationManagementPage';
 import ManageUserDashboardPage from './pages/admin/ManageUserDashboardPage';
@@ -53,6 +54,7 @@ import { ErrorBoundary } from '@/components/admin/ErrorBoundary';
 // Components
 import ProtectedRoute from './components/ProtectedRoute';
 import NotFound from './pages/NotFound';
+
 
 const queryClient = new QueryClient();
 
@@ -103,7 +105,7 @@ const App = () => (
                 <Route path="dashboard" element={<WriterDashboard />} />
                 {/* Use the updated ArticleCreatePage component */}
                 <Route path="articles/create" element={<ArticleCreatePage />} />
-                {/* Use the ArticleEditPage component for editing */}
+                <Route path="articles/:slug" element={<WriterArticleDetailPage />} />
                 <Route path="articles/edit/:slug" element={<ArticleEditPage />} />
                 <Route path="articles" element={<WriterArticlePage />} />
                 <Route path="wallet" element={<WalletPage />} />
@@ -122,8 +124,8 @@ const App = () => (
               >
                 <Route path="dashboard" element={<AdminDashboard />} />
                 <Route path="users" element={<UsersManagementPage />} />
-                <Route path="content" element={<ContentManagementPage />} />
-                <Route path="approvals" element={<PendingApprovalsPage />} />
+                <Route path="content" element={<ArticlesManagementPage />} />
+                <Route path="approvals" element={<ArticlesApprovalsPage />} />
                 <Route path="promotions" element={<PromotionRequestsPage />} />
                 <Route path="notifications" element={<NotificationManagementPage />} />
                 <Route path="userdashboard" element={<ManageUserDashboardPage/>}/>

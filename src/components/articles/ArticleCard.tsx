@@ -20,7 +20,7 @@ interface ArticleCardProps {
   setBookmarkedArticles?: React.Dispatch<React.SetStateAction<number[]>>;
   setLikedArticles?: React.Dispatch<React.SetStateAction<number[]>>;
   variant?: 'default' | 'horizontal' | 'compact';
-  onRequestPublish?: (slug: string) => Promise<void>;
+  onRequestPublish?: (articleId: number) => Promise<void>;
   onClick?: () => void;
 }
 
@@ -37,21 +37,21 @@ export default function ArticleCard({
   const { user } = useAuth();
   const [isBookmarkedState, setIsBookmarkedState] = useState(isBookmarked || article.is_bookmarked);
   const [isLikedState, setIsLikedState] = useState(isLiked || article.is_liked);
-  const [likesCount, setLikesCount] = useState(article.likes_count);
-  const [bookmarksCount, setBookmarksCount] = useState(article.bookmarks_count);
+  const [likesCount, setLikesCount] = useState(article.likes_count || article.total_likes || 0);
+  const [bookmarksCount, setBookmarksCount] = useState(article.bookmarks_count || article.total_bookmarks || 0);
   const [isBookmarkLoading, setIsBookmarkLoading] = useState(false);
   const [isLikeLoading, setIsLikeLoading] = useState(false);
   const [isRequestingPublish, setIsRequestingPublish] = useState(false);
-  const isOwnArticle = user?.username === article.author;
+  const isOwnArticle = user?.id === article.author || user?.username === article.author_name;
 
-  const formatDate = (dateString: string | null) => {
+  const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return '';
     return formatDistanceToNow(new Date(dateString), { addSuffix: true });
   };
 
   const getReadTime = () => {
     const wordsPerMinute = 200;
-    return Math.max(1, Math.ceil(article.word_count / wordsPerMinute));
+    return Math.max(1, Math.ceil((article.word_count || 0) / wordsPerMinute));
   };
 
   const handleLike = async (e: React.MouseEvent) => {
@@ -62,11 +62,11 @@ export default function ArticleCard({
 
     try {
       setIsLikeLoading(true);
-      const response = await articleService.toggleLike(article.slug);
+      await articleService.toggleLike(article.id);
 
       const newState = !isLikedState;
       setIsLikedState(newState);
-      setLikesCount(prevCount => newState ? prevCount + 1 : prevCount - 1);
+      setLikesCount(prevCount => newState ? prevCount + 1 : Math.max(0, prevCount - 1));
 
       if (setLikedArticles) {
         setLikedArticles((prev) =>
@@ -91,11 +91,11 @@ export default function ArticleCard({
 
     try {
       setIsBookmarkLoading(true);
-      await articleService.toggleBookmark(article.slug);
+      await articleService.toggleBookmark(article.id);
 
       const newState = !isBookmarkedState;
       setIsBookmarkedState(newState);
-      setBookmarksCount(prevCount => newState ? prevCount + 1 : prevCount - 1);
+      setBookmarksCount(prevCount => newState ? prevCount + 1 : Math.max(0, prevCount - 1));
 
       if (setBookmarkedArticles) {
         setBookmarkedArticles((prev) =>
@@ -120,18 +120,18 @@ export default function ArticleCard({
 
     try {
       setIsRequestingPublish(true);
-      await articleService.requestPublish(article.slug);
+      await articleService.requestPublish(article.id);
       
       if (onRequestPublish) {
-        await onRequestPublish(article.slug);
+        await onRequestPublish(article.id);
       }
       
       toast.success('Publish request sent');
     } catch (error: any) {
-      if (error.redirect_to_deposit) {
+      if (error.redirect_to_deposit || error.response?.data?.detail?.includes("Insufficient balance")) {
         toast.error('Insufficient balance. Please add funds to your wallet.');
       } else {
-        toast.error(error.detail || 'Failed to request publish');
+        toast.error(error.response?.data?.detail || 'Failed to request publish');
       }
     } finally {
       setIsRequestingPublish(false);
@@ -191,7 +191,7 @@ export default function ArticleCard({
 
       <CardContent className="pt-4">
         <div className="flex flex-wrap gap-2 mb-3">
-          {article.tags.slice(0, 2).map((tag, i) => (
+          {article.tags && article.tags.slice(0, 2).map((tag, i) => (
             <Badge
               key={i}
               variant="outline"
@@ -200,7 +200,7 @@ export default function ArticleCard({
               {tag}
             </Badge>
           ))}
-          {article.reward > 0 && (
+          {article.reward && article.reward > 0 && (
             <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white">
               <Award className="mr-1 h-3 w-3" /> ₹{article.reward}
             </Badge>
@@ -213,12 +213,12 @@ export default function ArticleCard({
         </h3>
 
         <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 mb-3">
-          {article.description}
+          {article.content ? article.content.substring(0, 150) : ''}
         </p>
 
         <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
           <User className="h-3.5 w-3.5 mr-1" />
-          <span className="mr-3">{article.author}</span>
+          <span className="mr-3">{article.author_name}</span>
           <Clock className="h-3.5 w-3.5 mr-1" />
           <span>{getReadTime()} min read</span>
         </div>
@@ -320,7 +320,7 @@ export default function ArticleCard({
       <Card className="overflow-hidden hover:shadow-md transition-shadow border-indigo-100 dark:border-indigo-900/30 group cursor-pointer" onClick={handleCardClick}>
         <div className="flex flex-col md:flex-row">
           {article.thumbnail && (
-            <div className="md:w-1/3 aspect-video">
+            <div className="md:w-1/3 aspect-video md:aspect-auto md:h-full">
               <img
                 src={article.thumbnail}
                 alt={article.title}
@@ -330,7 +330,7 @@ export default function ArticleCard({
           )}
           <div className={cn('flex flex-col flex-grow p-4', !article.thumbnail && 'md:w-full')}>
             <div className="flex flex-wrap gap-2 mb-2">
-              {article.tags.slice(0, 2).map((tag, i) => (
+              {article.tags && article.tags.slice(0, 2).map((tag, i) => (
                 <Badge
                   key={i}
                   variant="outline"
@@ -339,7 +339,7 @@ export default function ArticleCard({
                   {tag}
                 </Badge>
               ))}
-              {article.reward > 0 && (
+              {article.reward && article.reward > 0 && (
                 <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white">
                   <Award className="mr-1 h-3 w-3" /> ₹{article.reward}
                 </Badge>
@@ -352,13 +352,13 @@ export default function ArticleCard({
             </h3>
 
             <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 mb-2">
-              {article.description}
+              {article.content ? article.content.substring(0, 150) : ''}
             </p>
 
             <div className="mt-auto flex justify-between items-center">
               <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                 <User className="h-3.5 w-3.5 mr-1" />
-                <span className="mr-3">{article.author}</span>
+                <span className="mr-3">{article.author_name}</span>
                 <Clock className="h-3.5 w-3.5 mr-1" />
                 <span>{getReadTime()} min read</span>
               </div>
@@ -435,7 +435,7 @@ export default function ArticleCard({
               <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 mt-1">
                 <Clock className="h-3 w-3 mr-1" />
                 <span>{getReadTime()} min read</span>
-                {article.reward > 0 && (
+                {article.reward && article.reward > 0 && (
                   <Badge className="ml-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs py-0 px-1.5">
                     ₹{article.reward}
                   </Badge>

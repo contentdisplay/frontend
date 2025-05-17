@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { AlertCircle, CheckCircle, Edit, Eye, Loader2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
-import articleService from '@/services/admin/articleService';
+import adminArticleService from '@/services/admin/adminArticleService';
 import { motion } from 'framer-motion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -13,83 +14,114 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Link } from 'react-router-dom';
 
 interface Article {
   id: number;
   title: string;
   slug: string;
-  content?: string;
-  author: { id?: number; username: string };
-  status: string;
-  created_at?: string;
-  updated_at?: string;
-  likes_count?: number;
-  bookmarks_count?: number;
+  content: string;
+  author: number;
+  author_name: string;
+  status: 'draft' | 'pending' | 'published' | 'rejected';
+  created_at: string;
+  updated_at: string;
+  published_at: string | null;
+  thumbnail?: string | null;
+  total_reads: number;
+  total_likes: number;
+  likes_count: number;
+  bookmarks_count: number;
+  word_count: number;
+  tags?: string[];
 }
 
 interface ArticleFormData {
   title: string;
   content: string;
-  status: string;
+  status: 'draft' | 'pending' | 'published' | 'rejected';
+  admin_feedback?: string;
 }
 
-export default function ContentManagementPage() {
+export default function AdminArticleManagementPage() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [filteredArticles, setFilteredArticles] = useState<Article[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState({
+    total: 0,
+    published: 0,
+    pending: 0,
+    draft: 0,
+    rejected: 0
+  });
+  
+  // Dialog states
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [articleToEdit, setArticleToEdit] = useState<Article | null>(null);
+  const [feedbackDialogOpen, setFeedbackDialogOpen] = useState(false);
+  const [feedbackArticle, setFeedbackArticle] = useState<Article | null>(null);
+  
+  // Form states
   const [formData, setFormData] = useState<ArticleFormData>({
     title: '',
     content: '',
     status: 'draft'
   });
+  const [feedback, setFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Get articles and stats on initial load
   useEffect(() => {
     fetchArticles();
-    
-    // Add error handling for common React issues
-    const handleError = (event: ErrorEvent) => {
-      console.error('Error caught by global handler:', event.error);
-      toast.error('An error occurred in the application. Please try again.');
-    };
-    
-    window.addEventListener('error', handleError);
-    
-    return () => {
-      window.removeEventListener('error', handleError);
-    };
+    fetchStats();
   }, []);
 
   // Filter articles when search term or status filter changes
   useEffect(() => {
     filterArticles();
   }, [articles, searchTerm, filterStatus]);
+  
+  // Fetch article stats
+  const fetchStats = async () => {
+    try {
+      const statsData = await adminArticleService.getArticleStats();
+      setStats({
+        total: articles.length,
+        published: statsData.published_count || 0,
+        pending: statsData.pending_count || 0,
+        draft: statsData.draft_count || 0,
+        rejected: statsData.rejected_count || 0
+      });
+    } catch (err) {
+      console.error('Error fetching article stats:', err);
+    }
+  };
 
+  // Fetch all articles or filtered by status
   const fetchArticles = async () => {
     setIsLoading(true);
     try {
-      const data = await articleService.getArticles();
-      console.log('Articles data:', data); // Debug logging
+      let data;
+      if (filterStatus !== 'all') {
+        data = await adminArticleService.getAllArticles(filterStatus);
+      } else {
+        data = await adminArticleService.getAllArticles();
+      }
       setArticles(data);
     } catch (err) {
-      console.error('Error in fetchArticles:', err);
+      console.error('Error fetching articles:', err);
       toast.error('Failed to fetch articles');
-      // Set empty array on error to prevent filter errors
       setArticles([]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Filter articles locally based on search term and status
   const filterArticles = () => {
-    // Ensure articles is an array before filtering
     if (!Array.isArray(articles)) {
       setFilteredArticles([]);
       return;
@@ -101,21 +133,22 @@ export default function ContentManagementPage() {
     if (searchTerm) {
       filtered = filtered.filter(article => 
         article?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        article?.author?.username?.toLowerCase().includes(searchTerm.toLowerCase())
+        article?.author_name?.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
     
-    // Filter by status
-    if (filterStatus !== 'all') {
+    // Filter by status (if not already filtered from API)
+    if (filterStatus !== 'all' && !isLoading) {
       filtered = filtered.filter(article => article?.status === filterStatus);
     }
     
     setFilteredArticles(filtered);
   };
 
-  const handleUpdateStatus = async (id: number, status: string) => {
+  // Handle updating article status
+  const handleUpdateStatus = async (id: number, status: 'draft' | 'pending' | 'published' | 'rejected') => {
     try {
-      await articleService.updateArticleStatus(id, status);
+      await adminArticleService.updateArticleStatus(id, status);
       toast.success(`Article status updated to ${status}`);
       
       // Update article in local state
@@ -124,22 +157,106 @@ export default function ContentManagementPage() {
           article.id === id ? { ...article, status } : article
         )
       );
+      
+      // Refresh stats after status change
+      fetchStats();
     } catch (err) {
       toast.error('Failed to update article status');
       console.error(err);
     }
   };
 
+  // Handle approving an article
+  const handleApprove = async (id: number) => {
+    try {
+      await adminArticleService.approveArticle(id);
+      toast.success('Article approved and published');
+      
+      // Update article in local state
+      setArticles(prevArticles => 
+        prevArticles.map(article => 
+          article.id === id ? { ...article, status: 'published' } : article
+        )
+      );
+      
+      // Refresh stats after approval
+      fetchStats();
+    } catch (err) {
+      toast.error('Failed to approve article');
+      console.error(err);
+    }
+  };
+
+  // Handle rejecting an article with feedback
+  const handleReject = async (id: number) => {
+    if (!feedback.trim()) {
+      toast.error('Please provide feedback for rejection');
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true);
+      await adminArticleService.rejectArticle(id, feedback);
+      toast.success('Article rejected with feedback');
+      
+      // Update article in local state
+      setArticles(prevArticles => 
+        prevArticles.map(article => 
+          article.id === id ? { ...article, status: 'rejected' } : article
+        )
+      );
+      
+      // Close dialog and reset feedback
+      setFeedbackDialogOpen(false);
+      setFeedback('');
+      setFeedbackArticle(null);
+      
+      // Refresh stats after rejection
+      fetchStats();
+    } catch (err) {
+      toast.error('Failed to reject article');
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle adding feedback to an article
+  const handleAddFeedback = async () => {
+    if (!feedbackArticle || !feedback.trim()) {
+      toast.error('Please provide feedback');
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true);
+      await adminArticleService.addFeedback(feedbackArticle.id, feedback);
+      toast.success('Feedback added to article');
+      
+      // Close dialog and reset feedback
+      setFeedbackDialogOpen(false);
+      setFeedback('');
+      setFeedbackArticle(null);
+    } catch (err) {
+      toast.error('Failed to add feedback');
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Handle opening delete confirmation dialog
   const handleDeleteClick = (article: Article) => {
     setArticleToDelete(article);
     setDeleteDialogOpen(true);
   };
 
+  // Handle confirming article deletion
   const handleDeleteConfirm = async () => {
     if (!articleToDelete) return;
     
     try {
-      await articleService.deleteArticle(articleToDelete.slug);
+      await adminArticleService.deleteArticle(articleToDelete.id);
       toast.success('Article deleted successfully');
       
       // Remove article from local state
@@ -148,12 +265,17 @@ export default function ContentManagementPage() {
       );
       
       setDeleteDialogOpen(false);
+      setArticleToDelete(null);
+      
+      // Refresh stats after deletion
+      fetchStats();
     } catch (err) {
       toast.error('Failed to delete article');
       console.error(err);
     }
   };
 
+  // Handle opening edit dialog
   const handleEditClick = (article: Article) => {
     setArticleToEdit(article);
     setFormData({
@@ -164,22 +286,32 @@ export default function ContentManagementPage() {
     setEditDialogOpen(true);
   };
 
-  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  // Handle opening feedback dialog
+  const handleFeedbackClick = (article: Article) => {
+    setFeedbackArticle(article);
+    setFeedback('');
+    setFeedbackDialogOpen(true);
+  };
+
+  // Handle form input changes
+  const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // Handle status change in dropdown
   const handleStatusChange = (value: string) => {
-    setFormData(prev => ({ ...prev, status: value }));
+    setFormData(prev => ({ ...prev, status: value as 'draft' | 'pending' | 'published' | 'rejected' }));
   };
 
+  // Handle edit form submission
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!articleToEdit) return;
     
     setIsSubmitting(true);
     try {
-      await articleService.updateArticle(articleToEdit.slug, formData);
+      await adminArticleService.updateArticle(articleToEdit.id, formData);
       toast.success('Article updated successfully');
       
       // Update article in local state
@@ -197,6 +329,10 @@ export default function ContentManagementPage() {
       );
       
       setEditDialogOpen(false);
+      setArticleToEdit(null);
+      
+      // Refresh stats if status changed
+      fetchStats();
     } catch (err) {
       toast.error('Failed to update article');
       console.error(err);
@@ -205,6 +341,7 @@ export default function ContentManagementPage() {
     }
   };
 
+  // Get appropriate badge for article status
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'draft':
@@ -254,7 +391,10 @@ export default function ContentManagementPage() {
         </div>
         <div className="mt-4 md:mt-0 flex items-center space-x-2">
           <Button 
-            onClick={fetchArticles} 
+            onClick={() => {
+              fetchArticles();
+              fetchStats();
+            }} 
             variant="outline" 
             size="sm" 
             className="flex items-center"
@@ -263,7 +403,7 @@ export default function ContentManagementPage() {
             Refresh
           </Button>
           <Link 
-            to="/articles/create" 
+            to="/admin/articles/create" 
             className={buttonVariants({ variant: "default", size: "sm", className: "flex items-center" })}
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -278,7 +418,7 @@ export default function ContentManagementPage() {
             <CardTitle className="text-lg">Total Articles</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{Array.isArray(articles) ? articles.length : 0}</p>
+            <p className="text-3xl font-bold">{stats.total}</p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-md bg-gradient-to-br from-green-50 to-white dark:from-gray-800 dark:to-gray-900">
@@ -286,7 +426,7 @@ export default function ContentManagementPage() {
             <CardTitle className="text-lg">Published</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{Array.isArray(articles) ? articles.filter(a => a?.status === 'published').length : 0}</p>
+            <p className="text-3xl font-bold">{stats.published}</p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-md bg-gradient-to-br from-yellow-50 to-white dark:from-gray-800 dark:to-gray-900">
@@ -294,7 +434,7 @@ export default function ContentManagementPage() {
             <CardTitle className="text-lg">Pending</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{Array.isArray(articles) ? articles.filter(a => a?.status === 'pending').length : 0}</p>
+            <p className="text-3xl font-bold">{stats.pending}</p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-md bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900">
@@ -302,7 +442,7 @@ export default function ContentManagementPage() {
             <CardTitle className="text-lg">Drafts</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{Array.isArray(articles) ? articles.filter(a => a?.status === 'draft').length : 0}</p>
+            <p className="text-3xl font-bold">{stats.draft}</p>
           </CardContent>
         </Card>
       </div>
@@ -331,7 +471,21 @@ export default function ContentManagementPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <Select value={filterStatus} onValueChange={(value) => {
+              setFilterStatus(value);
+              // If changing filter via dropdown, fetch filtered articles from API for better performance
+              if (value !== 'all') {
+                adminArticleService.getAllArticles(value)
+                  .then(data => setArticles(data))
+                  .catch(err => {
+                    console.error('Error fetching filtered articles:', err);
+                    toast.error('Failed to filter articles');
+                  });
+              } else {
+                // If selecting "all", fetch all articles
+                fetchArticles();
+              }
+            }}>
               <SelectTrigger className="w-full sm:w-40">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -380,15 +534,18 @@ export default function ContentManagementPage() {
                   {filteredArticles.map((article) => (
                     <motion.tr key={article.id} variants={itemVariants}>
                       <TableCell className="font-medium">{article.title}</TableCell>
-                      <TableCell>{article.author.username}</TableCell>
+                      <TableCell>{article.author_name}</TableCell>
                       <TableCell>{getStatusBadge(article.status)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Link to={`/articles/${article.slug}`}>
+                          {/* View action */}
+                          <Link to={`/admin/articles/${article.id}`}>
                             <Button variant="ghost" size="icon" title="View">
                               <Eye className="h-4 w-4" />
                             </Button>
                           </Link>
+                          
+                          {/* Edit action */}
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -397,6 +554,8 @@ export default function ContentManagementPage() {
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
+                          
+                          {/* Delete action */}
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -406,6 +565,7 @@ export default function ContentManagementPage() {
                             <Trash2 className="h-4 w-4" />
                           </Button>
                           
+                          {/* Send for review action (for drafts) */}
                           {article.status === 'draft' && (
                             <Button 
                               variant="outline" 
@@ -416,13 +576,14 @@ export default function ContentManagementPage() {
                             </Button>
                           )}
                           
+                          {/* Approve/Reject actions (for pending) */}
                           {article.status === 'pending' && (
                             <div className="flex gap-2">
                               <Button 
                                 variant="outline" 
                                 size="sm"
                                 className="text-green-600 border-green-600 hover:bg-green-50"
-                                onClick={() => handleUpdateStatus(article.id, 'published')}
+                                onClick={() => handleApprove(article.id)}
                               >
                                 <CheckCircle className="h-4 w-4 mr-1" />
                                 Approve
@@ -431,12 +592,24 @@ export default function ContentManagementPage() {
                                 variant="outline" 
                                 size="sm"
                                 className="text-red-600 border-red-600 hover:bg-red-50"
-                                onClick={() => handleUpdateStatus(article.id, 'rejected')}
+                                onClick={() => handleFeedbackClick(article)}
                               >
                                 <XCircle className="h-4 w-4 mr-1" />
                                 Reject
                               </Button>
                             </div>
+                          )}
+                          
+                          {/* Add feedback action (for any article) */}
+                          {article.status !== 'pending' && (
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => handleFeedbackClick(article)}
+                              className="ml-2"
+                            >
+                              Add Feedback
+                            </Button>
                           )}
                         </div>
                       </TableCell>
@@ -534,6 +707,72 @@ export default function ContentManagementPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Feedback Dialog */}
+      <Dialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {feedbackArticle?.status === 'pending' ? 'Reject Article' : 'Add Feedback'}
+            </DialogTitle>
+            <DialogDescription>
+              {feedbackArticle?.status === 'pending' 
+                ? 'Provide feedback about why this article is being rejected.'
+                : 'Add editorial feedback to this article.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="feedback">Feedback</Label>
+            <Textarea
+              id="feedback"
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="Enter your feedback here..."
+              rows={5}
+              className="mt-2"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setFeedbackDialogOpen(false);
+              setFeedback('');
+              setFeedbackArticle(null);
+            }}>
+              Cancel
+            </Button>
+            {feedbackArticle?.status === 'pending' ? (
+              <Button
+                variant="destructive"
+                onClick={() => handleReject(feedbackArticle.id)}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Rejecting...
+                  </>
+                ) : (
+                  'Reject Article'
+                )}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleAddFeedback}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit Feedback'
+                )}
+              </Button>
+            )}
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

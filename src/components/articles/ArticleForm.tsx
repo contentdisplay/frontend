@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Article, ArticleFormData } from '@/services/articleService';
-import { X, UploadCloud, Wallet, AlertCircle, Save, Loader2, CheckCircle, ArrowRight } from 'lucide-react';
+import { X, UploadCloud, Wallet, AlertCircle, Save, Loader2, CheckCircle, ArrowRight, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import articleService from '@/services/articleService';
@@ -105,7 +105,7 @@ export default function ArticleForm({
   // Dialog states
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-  const [successAction, setSuccessAction] = useState<'created' | 'updated' | 'draft' | null>(null);
+  const [successAction, setSuccessAction] = useState<'created' | 'updated' | 'draft' | 'pending' | null>(null);
   const [createdArticle, setCreatedArticle] = useState<Article | null>(null);
 
   // Load the rich text editor
@@ -142,7 +142,7 @@ export default function ArticleForm({
         setLastSaved(now);
         toast.info('Draft auto-saved', { id: 'autosave', duration: 2000 });
       }
-    }, 60000);
+    }, 60000); // Auto-save every minute
     
     return () => clearInterval(interval);
   }, [form]);
@@ -326,6 +326,7 @@ export default function ArticleForm({
       
       setIsRequestingPublish(true);
       
+      // Check balance again to ensure it's sufficient
       const balanceCheck = await articleService.checkPublishBalance();
       if (!balanceCheck.has_sufficient_balance) {
         toast.error(`Insufficient balance. You need ₹${balanceCheck.required_balance} to publish.`);
@@ -344,16 +345,22 @@ export default function ArticleForm({
       
       let articleId = initialData?.id || createdArticle?.id;
       
+      // Update the article first if needed
       if (mode === 'edit' && initialData?.slug) {
         await articleService.updateArticle(initialData.slug, formData);
       } else if (mode === 'create' && createdArticle?.slug) {
         await articleService.updateArticle(createdArticle.slug, formData);
       }
       
+      // Then request publishing
       await onRequestPublish?.(articleId!);
       
-      toast.success('Publish request sent successfully. Article is now pending approval and will be reviewed within 15 minutes.');
-      navigate('/writer/articles');
+      // Update the wallet balance (optimistic update)
+      setWalletBalance(prev => Math.max(0, prev - requiredBalance));
+      
+      // Show success dialog with pending status
+      setSuccessAction('pending');
+      setShowSuccessDialog(true);
     } catch (error: any) {
       if (error.response?.data?.detail?.includes("Insufficient balance")) {
         toast.error('Insufficient balance. Please add funds to your wallet.');
@@ -478,6 +485,7 @@ export default function ArticleForm({
               <li>Title: At least 5 characters</li>
               <li>Content: Minimum 100 words</li>
               <li>Recommended: 500+ words for better engagement</li>
+              <li>Publishing fee: ₹150 (deducted once approved)</li>
             </ul>
           </AlertDescription>
         </Alert>
@@ -601,7 +609,7 @@ export default function ArticleForm({
         />
 
         {/* Action buttons */}
-        <div className="flex justify-between pt-6 gap-4 border-t border-gray-200 dark:border-gray-800">
+        <div className="flex flex-wrap md:flex-nowrap justify-between pt-6 gap-4 border-t border-gray-200 dark:border-gray-800">
           <Button
             type="button"
             variant="outline"
@@ -614,12 +622,12 @@ export default function ArticleForm({
                 navigate('/writer/articles');
               }
             }}
-            className="border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+            className="w-full md:w-auto border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
           >
             Cancel
           </Button>
           
-          <div className="flex flex-wrap gap-3 justify-end">
+          <div className="flex flex-wrap gap-3 justify-end w-full md:w-auto">
             {/* Save as Draft Button */}
             <TooltipProvider>
               <Tooltip>
@@ -628,7 +636,7 @@ export default function ArticleForm({
                     type="button"
                     variant="outline"
                     className={cn(
-                      "text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/20",
+                      "w-full md:w-auto text-blue-600 border-blue-300 hover:bg-blue-50 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/20",
                       draftSaved && !form.formState.isDirty && "bg-blue-50 border-blue-400 dark:bg-blue-900/30"
                     )}
                     onClick={handleSaveDraft}
@@ -662,7 +670,7 @@ export default function ArticleForm({
             <Button 
               type="submit" 
               disabled={isSubmitting}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
+              className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"
             >
               {isSubmitting ? (
                 <>
@@ -684,7 +692,7 @@ export default function ArticleForm({
                     <Button
                       type="button"
                       variant="outline"
-                      className="text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-900/20"
+                      className="w-full md:w-auto text-amber-600 border-amber-300 hover:bg-amber-50 dark:text-amber-400 dark:border-amber-800 dark:hover:bg-amber-900/20"
                       onClick={initiatePublishRequest}
                       disabled={!isPublishable || isRequestingPublish}
                     >
@@ -716,15 +724,41 @@ export default function ArticleForm({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-center flex items-center justify-center gap-2">
-              <CheckCircle className="h-6 w-6 text-green-500" />
-              {successAction === 'created' && 'Article Created Successfully!'}
-              {successAction === 'updated' && 'Article Updated Successfully!'}
-              {successAction === 'draft' && 'Draft Saved Successfully!'}
+              {successAction === 'created' && (
+                <>
+                  <CheckCircle className="h-6 w-6 text-green-500" />
+                  Article Created Successfully!
+                </>
+              )}
+              {successAction === 'updated' && (
+                <>
+                  <CheckCircle className="h-6 w-6 text-green-500" />
+                  Article Updated Successfully!
+                </>
+              )}
+              {successAction === 'draft' && (
+                <>
+                  <CheckCircle className="h-6 w-6 text-blue-500" />
+                  Draft Saved Successfully!
+                </>
+              )}
+              {successAction === 'pending' && (
+                <>
+                  <Clock className="h-6 w-6 text-amber-500" />
+                  Article Submitted for Review
+                </>
+              )}
             </DialogTitle>
             <DialogDescription className="text-center pt-2">
-              {successAction === 'created' && 'Your article has been created and saved as a draft.'}
+              {successAction === 'created' && 'Your article has been created and pending wait for admin approval.'}
               {successAction === 'updated' && 'Your changes have been saved.'}
               {successAction === 'draft' && 'Your draft has been saved. You can come back and continue editing later.'}
+              {successAction === 'pending' && (
+                <>
+                  Your article has been submitted for review. ₹{requiredBalance} has been deducted from your wallet.
+                  An administrator will review your article within 15 minutes.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           
@@ -745,7 +779,7 @@ export default function ArticleForm({
                     View My Articles
                   </Button>
                   
-                  {isPublishable && (
+                  {/* {isPublishable && (
                     <Button
                       variant="outline"
                       className="w-full text-amber-600 border-amber-300 hover:bg-amber-50"
@@ -757,7 +791,7 @@ export default function ArticleForm({
                       <Wallet className="mr-2 h-4 w-4" />
                       Request Publishing (₹{requiredBalance})
                     </Button>
-                  )}
+                  )} */}
                   
                   {!isPublishable && (
                     <Button
@@ -773,6 +807,42 @@ export default function ArticleForm({
                     </Button>
                   )}
                 </div>
+              </div>
+            )}
+            
+            {successAction === 'pending' && (
+              <div className="space-y-4">
+                <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                  <h4 className="font-medium text-amber-800 flex items-center">
+                    <Clock className="h-4 w-4 mr-2" />
+                    Review Process
+                  </h4>
+                  <ul className="mt-2 space-y-2 text-sm text-amber-700">
+                    <li className="flex items-start">
+                      <span className="inline-block w-4 h-4 bg-amber-200 rounded-full text-amber-800 flex items-center justify-center text-xs mr-2 mt-0.5">1</span>
+                      Your article is now in the admin review queue
+                    </li>
+                    <li className="flex items-start">
+                      <span className="inline-block w-4 h-4 bg-amber-200 rounded-full text-amber-800 flex items-center justify-center text-xs mr-2 mt-0.5">2</span>
+                      Reviews typically take less than 15 minutes
+                    </li>
+                    <li className="flex items-start">
+                      <span className="inline-block w-4 h-4 bg-amber-200 rounded-full text-amber-800 flex items-center justify-center text-xs mr-2 mt-0.5">3</span>
+                      You'll receive a notification when approved
+                    </li>
+                  </ul>
+                </div>
+                <Button
+                  variant="default"
+                  className="w-full"
+                  onClick={() => {
+                    setShowSuccessDialog(false);
+                    navigate('/writer/articles');
+                  }}
+                >
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  View My Articles
+                </Button>
               </div>
             )}
             

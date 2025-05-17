@@ -100,8 +100,13 @@ export default function AdminPromotionRequestsPage() {
     
     setProcessingAction(true);
     try {
-      await adminPromotionService.approvePromotion(selectedPromotion.id, actionType);
-      toast.success(`Promotion request ${actionType}`);
+      if (actionType === 'approved') {
+        await userService.approvePromotion(selectedPromotion.id);
+        toast.success('Promotion request approved');
+      } else {
+        await userService.rejectPromotion(selectedPromotion.id, 'Request rejected by admin');
+        toast.success('Promotion request rejected');
+      }
       fetchPromotions();
       setConfirmDialogOpen(false);
     } catch (err: any) {
@@ -110,7 +115,6 @@ export default function AdminPromotionRequestsPage() {
       setProcessingAction(false);
     }
   };
-
   // Format date for display
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = { 
