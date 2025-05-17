@@ -15,7 +15,7 @@ import { motion } from 'framer-motion';
 
 interface PromotionRequest {
   id: number;
-  user: {
+  user?: {
     id: number;
     username: string;
     email?: string;
@@ -78,8 +78,8 @@ export default function AdminPromotionRequestsPage() {
     
     try {
       const [userProfile, userWallet] = await Promise.all([
-        adminPromotionService.getUserProfile(promotion.user.id),
-        adminPromotionService.getUserWallet(promotion.user.id)
+        adminPromotionService.getUserProfile(promotion.user?.id || 0),
+        adminPromotionService.getUserWallet(promotion.user?.id || 0)
       ]);
       
       setSelectedUserProfile(userProfile);
@@ -101,10 +101,10 @@ export default function AdminPromotionRequestsPage() {
     setProcessingAction(true);
     try {
       if (actionType === 'approved') {
-        await userService.approvePromotion(selectedPromotion.id);
+        await adminPromotionService.approvePromotion(selectedPromotion.id);
         toast.success('Promotion request approved');
       } else {
-        await userService.rejectPromotion(selectedPromotion.id, 'Request rejected by admin');
+        await adminPromotionService.rejectPromotion(selectedPromotion.id, 'Request rejected by admin');
         toast.success('Promotion request rejected');
       }
       fetchPromotions();
@@ -115,6 +115,7 @@ export default function AdminPromotionRequestsPage() {
       setProcessingAction(false);
     }
   };
+  
   // Format date for display
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = { 
@@ -200,10 +201,10 @@ export default function AdminPromotionRequestsPage() {
                         <div className="flex items-center gap-2">
                           <Avatar className="h-8 w-8">
                             <AvatarFallback className="bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
-                              {promotion.user.username.charAt(0).toUpperCase()}
+                              {promotion.user?.username?.charAt(0).toUpperCase() || 'U'}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="font-medium">{promotion.user.username}</span>
+                          <span className="font-medium">{promotion.user?.username || 'Unknown User'}</span>
                         </div>
                       </TableCell>
                       <TableCell>{formatDate(promotion.requested_at)}</TableCell>
@@ -213,6 +214,7 @@ export default function AdminPromotionRequestsPage() {
                             variant="outline" 
                             size="sm"
                             onClick={() => handleViewUser(promotion)}
+                            disabled={!promotion.user}
                           >
                             <Eye className="h-4 w-4 mr-1" />
                             View
@@ -222,6 +224,7 @@ export default function AdminPromotionRequestsPage() {
                             size="sm"
                             className="bg-green-600 hover:bg-green-700"
                             onClick={() => handleAction(promotion, 'approved')}
+                            disabled={!promotion.user}
                           >
                             <Check className="h-4 w-4 mr-1" />
                             Approve
@@ -230,6 +233,7 @@ export default function AdminPromotionRequestsPage() {
                             variant="destructive" 
                             size="sm"
                             onClick={() => handleAction(promotion, 'rejected')}
+                            disabled={!promotion.user}
                           >
                             <X className="h-4 w-4 mr-1" />
                             Reject
@@ -255,7 +259,7 @@ export default function AdminPromotionRequestsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {selectedPromotion && (
+          {selectedPromotion && selectedPromotion.user ? (
             <Tabs defaultValue="profile" className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="profile">Profile</TabsTrigger>
@@ -419,6 +423,11 @@ export default function AdminPromotionRequestsPage() {
                 </div>
               </TabsContent>
             </Tabs>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              <User className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+              <p>User information not available.</p>
+            </div>
           )}
 
           <DialogFooter className="flex justify-between sm:justify-between">
@@ -432,6 +441,7 @@ export default function AdminPromotionRequestsPage() {
                   setUserDialogOpen(false);
                   handleAction(selectedPromotion!, 'rejected');
                 }}
+                disabled={!selectedPromotion?.user}
               >
                 <X className="h-4 w-4 mr-1" />
                 Reject
@@ -443,6 +453,7 @@ export default function AdminPromotionRequestsPage() {
                   handleAction(selectedPromotion!, 'approved');
                 }}
                 disabled={
+                  !selectedPromotion?.user ||
                   !selectedUserProfile || 
                   !selectedUserWallet || 
                   !isProfileComplete(selectedUserProfile) || 
@@ -472,7 +483,7 @@ export default function AdminPromotionRequestsPage() {
             </DialogDescription>
           </DialogHeader>
           
-          {selectedPromotion && (
+          {selectedPromotion && selectedPromotion.user ? (
             <div className="py-4">
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-md">
                 <Avatar className="h-10 w-10">
@@ -496,6 +507,10 @@ export default function AdminPromotionRequestsPage() {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="py-4 text-center text-muted-foreground">
+              <p>User information not available.</p>
+            </div>
           )}
           
           <DialogFooter>
@@ -505,7 +520,7 @@ export default function AdminPromotionRequestsPage() {
             <Button 
               onClick={confirmAction}
               className={actionType === 'approved' ? "bg-green-600 hover:bg-green-700" : "bg-red-600 hover:bg-red-700"}
-              disabled={processingAction || (actionType === 'approved' && selectedUserWallet?.balance < 50)}
+              disabled={processingAction || !selectedPromotion?.user || (actionType === 'approved' && selectedUserWallet?.balance < 50)}
             >
               {processingAction ? (
                 <>
