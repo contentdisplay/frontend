@@ -13,7 +13,6 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Article, ArticleFormData } from '@/services/articleService';
 import { X, UploadCloud, Wallet, AlertCircle, Save, Loader2, CheckCircle, ArrowRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -48,13 +47,11 @@ const countWords = (text: string): number => {
 // Schema definitions
 const articleDraftSchema = z.object({
   title: z.string().min(1, { message: 'Title is required' }),
-  description: z.string().optional().default(''),
   content: z.string().optional().default(''),
 });
 
 const articlePublishSchema = z.object({
   title: z.string().min(5, { message: 'Title must be at least 5 characters long' }),
-  description: z.string().min(10, { message: 'Description must be at least 10 characters long' }),
   content: z.string().refine(
     (value) => countWords(value) >= 100,
     { message: 'Content must be at least 100 words' }
@@ -62,12 +59,12 @@ const articlePublishSchema = z.object({
 });
 
 interface ArticleFormProps {
-  onSubmit: (data: ArticleFormData) => Promise<void>;
+  onSubmit: (data: ArticleFormData) => Promise<Article | null>;
   initialData?: Article;
   isSubmitting: boolean;
   mode: 'create' | 'edit';
   article?: Article;
-  onRequestPublish?: (slug: string) => Promise<void>;
+  onRequestPublish?: (id: number) => Promise<void>;
 }
 
 export default function ArticleForm({
@@ -84,7 +81,6 @@ export default function ArticleForm({
     resolver: zodResolver(articleDraftSchema),
     defaultValues: {
       title: initialData?.title || '',
-      description: initialData?.description || '',
       content: initialData?.content || '',
     },
   });
@@ -93,7 +89,7 @@ export default function ArticleForm({
   const [thumbnail, setThumbnail] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(initialData?.thumbnail || null);
   const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [requiredBalance] = useState<number>(150); // Fixed value to prevent undefined errors
+  const [requiredBalance] = useState<number>(150);
   const [showDepositPrompt, setShowDepositPrompt] = useState(false);
   const [isPublishable, setIsPublishable] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
@@ -110,6 +106,7 @@ export default function ArticleForm({
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [successAction, setSuccessAction] = useState<'created' | 'updated' | 'draft' | null>(null);
+  const [createdArticle, setCreatedArticle] = useState<Article | null>(null);
 
   // Load the rich text editor
   useEffect(() => {
@@ -145,7 +142,7 @@ export default function ArticleForm({
         setLastSaved(now);
         toast.info('Draft auto-saved', { id: 'autosave', duration: 2000 });
       }
-    }, 60000); // Auto-save every minute
+    }, 60000);
     
     return () => clearInterval(interval);
   }, [form]);
@@ -161,10 +158,9 @@ export default function ArticleForm({
           const now = new Date();
           const hoursDiff = (now.getTime() - timestamp.getTime()) / (1000 * 60 * 60);
           
-          if (hoursDiff < 24) { // Only restore if saved within 24 hours
+          if (hoursDiff < 24) {
             form.reset({
               title: parsedDraft.title || '',
-              description: parsedDraft.description || '',
               content: parsedDraft.content || '',
             });
             setDraftSaved(true);
@@ -178,7 +174,7 @@ export default function ArticleForm({
     }
   }, [mode, form]);
 
-  // Check wallet balance (fixed to prevent undefined error)
+  // Check wallet balance
   const checkWalletBalance = async () => {
     try {
       setIsLoadingBalance(true);
@@ -206,7 +202,6 @@ export default function ArticleForm({
       }
       
       setThumbnail(file);
-
       const reader = new FileReader();
       reader.onload = () => {
         setThumbnailPreview(reader.result as string);
@@ -217,7 +212,6 @@ export default function ArticleForm({
 
   // Handle redirection to wallet page
   const handleDepositRedirect = () => {
-    // Save current form state before redirecting
     const values = form.getValues();
     localStorage.setItem('article_draft', JSON.stringify({
       ...values,
@@ -242,15 +236,16 @@ export default function ArticleForm({
       
       const formData: ArticleFormData = {
         title: values.title,
-        description: values.description || '',
         content: values.content || '',
         tags: [],
         thumbnail: thumbnail || undefined,
+        status: 'draft'
       };
-  
+
       if (mode === 'create') {
-        await articleService.createArticle(formData, true);
+        const article = await articleService.createArticle(formData, true);
         localStorage.removeItem('article_draft');
+        setCreatedArticle(article);
         setSuccessAction('draft');
         setShowSuccessDialog(true);
       } else {
@@ -272,11 +267,8 @@ export default function ArticleForm({
   // Submit form (create/update article)
   const handleFormSubmit = async (values: z.infer<typeof articleDraftSchema>) => {
     try {
-      // Validate using stricter schema for non-drafts
-      const result = articlePublishSchema.safeParse(values);
-      
+      const result = articleDraftSchema.safeParse(values);
       if (!result.success) {
-        // Show validation errors
         result.error.errors.forEach(err => {
           form.setError(err.path[0] as keyof z.infer<typeof articleDraftSchema>, {
             type: 'manual',
@@ -288,15 +280,16 @@ export default function ArticleForm({
       
       const formData: ArticleFormData = {
         title: values.title,
-        description: values.description || '',
         content: values.content || '',
         tags: [],
         thumbnail: thumbnail || undefined,
-        status: 'draft', // Use draft initially
+        status: 'draft'
       };
 
-      await onSubmit(formData);
+      const article = await onSubmit(formData);
+      if (!article) return;
       
+      setCreatedArticle(article);
       if (mode === 'create') {
         localStorage.removeItem('article_draft');
         setSuccessAction('created');
@@ -312,7 +305,7 @@ export default function ArticleForm({
 
   // Handle request to publish
   const handleRequestPublish = async () => {
-    if (!initialData?.slug || !onRequestPublish) return;
+    if (!initialData?.id && !createdArticle?.id) return;
     
     try {
       const values = form.getValues();
@@ -333,21 +326,36 @@ export default function ArticleForm({
       
       setIsRequestingPublish(true);
       
-      // Check wallet balance
       const balanceCheck = await articleService.checkPublishBalance();
       if (!balanceCheck.has_sufficient_balance) {
-        toast.error(`Insufficient balance. You need ₹${requiredBalance} to publish.`);
+        toast.error(`Insufficient balance. You need ₹${balanceCheck.required_balance} to publish.`);
         setShowDepositPrompt(true);
+        setIsRequestingPublish(false);
         return;
       }
       
-      setShowPublishConfirm(false);
-      await onRequestPublish(initialData.slug);
+      const formData: ArticleFormData = {
+        title: values.title,
+        content: values.content || '',
+        tags: [],
+        thumbnail: thumbnail || undefined,
+        status: 'pending'
+      };
+      
+      let articleId = initialData?.id || createdArticle?.id;
+      
+      if (mode === 'edit' && initialData?.slug) {
+        await articleService.updateArticle(initialData.slug, formData);
+      } else if (mode === 'create' && createdArticle?.slug) {
+        await articleService.updateArticle(createdArticle.slug, formData);
+      }
+      
+      await onRequestPublish?.(articleId!);
       
       toast.success('Publish request sent successfully. Article is now pending approval and will be reviewed within 15 minutes.');
       navigate('/writer/articles');
     } catch (error: any) {
-      if (error.redirect_to_deposit) {
+      if (error.response?.data?.detail?.includes("Insufficient balance")) {
         toast.error('Insufficient balance. Please add funds to your wallet.');
         handleDepositRedirect();
       } else {
@@ -367,14 +375,12 @@ export default function ArticleForm({
       if (error.response.status === 405) {
         errorMessage = 'API endpoint not configured correctly. Please contact an administrator.';
       } else if (error.response.status === 400 && typeof error.response.data === 'object') {
-        // Field-specific errors from backend
         const fieldErrors = Object.entries(error.response.data)
           .map(([field, errs]: [string, any]) => {
             const fieldName = field.charAt(0).toUpperCase() + field.slice(1);
             const errString = Array.isArray(errs) ? errs.join(', ') : String(errs);
             
-            // Set form error if applicable
-            if (['title', 'description', 'content'].includes(field)) {
+            if (['title', 'content'].includes(field)) {
               form.setError(field as keyof z.infer<typeof articleDraftSchema>, {
                 type: 'manual',
                 message: errString,
@@ -470,7 +476,6 @@ export default function ArticleForm({
           <AlertDescription className="text-green-700 dark:text-green-300">
             <ul className="list-disc list-inside space-y-1 mt-1">
               <li>Title: At least 5 characters</li>
-              <li>Description: At least 10 characters</li>
               <li>Content: Minimum 100 words</li>
               <li>Recommended: 500+ words for better engagement</li>
             </ul>
@@ -551,30 +556,6 @@ export default function ArticleForm({
                 />
               </FormControl>
               <FormDescription>A catchy title that describes your article (required)</FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        {/* Description */}
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel className="text-base font-medium">Description</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Brief summary of your article"
-                  rows={3}
-                  {...field}
-                  className="border-gray-300 dark:border-gray-700 focus:border-indigo-500 focus:ring-indigo-500"
-                />
-              </FormControl>
-              <FormDescription>
-                A short introduction that will appear in previews
-                {mode === 'create' && <span> (required for publishing, optional for drafts)</span>}
-              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -696,7 +677,7 @@ export default function ArticleForm({
             </Button>
             
             {/* Request Publish Button */}
-            {mode === 'edit' && initialData && !initialData.is_published && !initialData.is_pending_publish && initialData.status !== 'rejected' && (
+            {((mode === 'edit' && initialData && !initialData.is_published && !initialData.is_pending_publish && initialData.status !== 'rejected') || (mode === 'create' && createdArticle && createdArticle.status === 'draft')) && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>

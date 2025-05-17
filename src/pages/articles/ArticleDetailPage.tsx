@@ -305,7 +305,7 @@ export default function ArticleDetailPage() {
             asChild
             className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200"
           >
-            <Link to="/articles">
+            <Link to="/writer/articles">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Articles
             </Link>

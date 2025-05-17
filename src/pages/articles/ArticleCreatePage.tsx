@@ -19,31 +19,14 @@ export default function ArticleCreatePage() {
     try {
       setIsSubmitting(true);
       
-      // First check wallet balance
-      const balanceCheck = await articleService.checkPublishBalance();
+      const article = await articleService.createArticle(data, true);
       
-      if (!balanceCheck.has_sufficient_balance && !data.status === 'draft') {
-        setError({
-          message: 'Insufficient wallet balance',
-          details: `You need ${balanceCheck.required_balance} reward points to publish an article. Your current balance is ${balanceCheck.current_balance}.`
-        });
-        toast.error('Insufficient balance for publishing');
-        setIsSubmitting(false);
-        return null;
-      }
-      
-      // Create the article with proper status
-      const createdArticle = await articleService.createArticle(data, data.status === 'draft');
-      
-      console.log("Article created successfully:", createdArticle);
+      console.log("Article created successfully:", article);
       toast.success('Article created successfully');
-      navigate('/writer/articles');
-      
-      return createdArticle;
+      return article;
     } catch (error: any) {
       console.error("Article creation error:", error);
       
-      // Enhanced error handling for better user feedback
       let errorMessage = 'Failed to create article';
       let errorDetails = '';
       
@@ -60,7 +43,6 @@ export default function ArticleCreatePage() {
         } else if (error.response.status === 400) {
           errorMessage = 'Invalid article data';
           
-          // Format field-specific errors for better readability
           if (typeof error.response.data === 'object') {
             const fieldErrors = Object.entries(error.response.data)
               .map(([field, errors]: [string, any]) => {
@@ -82,11 +64,9 @@ export default function ArticleCreatePage() {
           errorMessage = error.response.data.message;
         }
       } else if (error.request) {
-        // The request was made but no response was received
         errorMessage = 'No response from server';
         errorDetails = 'Please check your internet connection and try again.';
       } else {
-        // Something happened in setting up the request
         errorMessage = error.message || 'Unknown error occurred';
         errorDetails = 'There was a problem processing your request. Please try again later.';
       }
@@ -97,6 +77,23 @@ export default function ArticleCreatePage() {
       return null;
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleRequestPublish = async (articleId: number) => {
+    try {
+      await articleService.requestPublish(articleId);
+      toast.success('Publish request submitted successfully');
+    } catch (error: any) {
+      console.error("Publish request error:", error);
+      let errorMessage = 'Failed to request publication';
+      
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      }
+      
+      toast.error(errorMessage);
+      throw error;
     }
   };
 
@@ -139,7 +136,7 @@ export default function ArticleCreatePage() {
           <div className="mb-6">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Create Your Article</h2>
             <p className="text-gray-600 dark:text-gray-400 mt-1">
-              Fill in the details below to create your article. You can save it as a draft first or publish it immediately.
+              Fill in the details below to create your article. You can save it as a draft first or request publication later.
             </p>
             <Separator className="my-4" />
           </div>
@@ -148,6 +145,7 @@ export default function ArticleCreatePage() {
             mode="create" 
             onSubmit={handleSubmit} 
             isSubmitting={isSubmitting} 
+            onRequestPublish={handleRequestPublish}
           />
         </div>
       </div>

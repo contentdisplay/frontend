@@ -1,11 +1,9 @@
-// Updated checkPublishBalance function for articleService.ts
 import api from './api';
 
 export interface Article {
   id: number;
   title: string;
   slug: string;
-  description?: string;
   content: string;
   author: string;
   author_name: string;
@@ -31,7 +29,6 @@ export interface Article {
 export interface ArticleFormData {
   title: string;
   content: string;
-  description?: string;
   tags?: string[];
   thumbnail?: File;
   status?: string;
@@ -63,23 +60,18 @@ const articleService = {
       const response = await api.get('/articles/');
       console.log('API Response from getPublishedArticles:', response);
       
-      // Handle different response formats
       let articles: Article[] = [];
       
       if (Array.isArray(response.data)) {
-        // Direct array response
         articles = response.data;
       } else if (response.data && typeof response.data === 'object') {
-        // Paginated response with results array
         if (Array.isArray(response.data.results)) {
           articles = response.data.results;
         } else if (Array.isArray(response.data.data)) {
-          // Some APIs use "data" instead of "results"
           articles = response.data.data;
         }
       }
       
-      // Transform each article to ensure consistent properties
       return articles.map(article => ({
         ...article,
         likes_count: article.total_likes || 0,
@@ -91,7 +83,7 @@ const articleService = {
         word_count: article.word_count || 0,
         is_published: article.status === 'published',
         is_pending_publish: article.status === 'pending',
-        description: article.description || ''
+        content: article.content || ''
       }));
     } catch (error) {
       console.error('Failed to fetch published articles:', error);
@@ -114,10 +106,6 @@ const articleService = {
     formData.append('title', data.title);
     formData.append('content', data.content || '');
     
-    if (data.description) {
-      formData.append('description', data.description);
-    }
-    
     if (data.tags && data.tags.length > 0) {
       formData.append('tags', JSON.stringify(data.tags));
     }
@@ -126,34 +114,32 @@ const articleService = {
       formData.append('thumbnail', data.thumbnail);
     }
     
-    // Always set status field
     formData.append('status', isDraft ? 'draft' : 'pending');
   
     try {
       const response = await api.post('/articles/create/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
       });
+      console.log('Article created:', response.data);
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Article creation error:", error);
       
-      // Check if the error is due to insufficient balance
-      if (error.response?.data?.detail?.includes("Insufficient reward points")) {
+      if (error.response?.data?.detail?.includes("Insufficient balance")) {
         error.redirect_to_deposit = true;
       }
       
       throw error;
     }
-},
+  },
 
   updateArticle: async (slug: string, data: ArticleFormData, isDraft: boolean = false): Promise<Article> => {
     const formData = new FormData();
     formData.append('title', data.title);
     formData.append('content', data.content || '');
-    
-    if (data.description) {
-      formData.append('description', data.description);
-    }
     
     if (data.tags && data.tags.length > 0) {
       formData.append('tags', JSON.stringify(data.tags));
@@ -171,8 +157,12 @@ const articleService = {
     
     try {
       const response = await api.patch(`/articles/${slug}/`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
       });
+      console.log('Article updated:', response.data);
       return response.data;
     } catch (error) {
       console.error("Article update error:", error);
@@ -182,7 +172,10 @@ const articleService = {
 
   deleteArticle: async (slug: string): Promise<void> => {
     try {
-      await api.delete(`/articles/${slug}/`);
+      await api.delete(`/articles/${slug}/`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      console.log('Article deleted:', slug);
     } catch (error) {
       console.error("Article deletion error:", error);
       throw error;
@@ -191,7 +184,10 @@ const articleService = {
 
   toggleLike: async (slug: string): Promise<any> => {
     try {
-      const response = await api.post(`/articles/${slug}/like/`);
+      const response = await api.post(`/articles/${slug}/like/`, {}, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      console.log('Like toggled:', response.data);
       return response.data;
     } catch (error) {
       console.error("Like article error:", error);
@@ -201,7 +197,10 @@ const articleService = {
 
   toggleBookmark: async (slug: string): Promise<any> => {
     try {
-      const response = await api.post(`/articles/${slug}/bookmark/`);
+      const response = await api.post(`/articles/${slug}/bookmark/`, {}, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      console.log('Bookmark toggled:', response.data);
       return response.data;
     } catch (error) {
       console.error("Bookmark article error:", error);
@@ -209,9 +208,12 @@ const articleService = {
     }
   },
 
-  requestPublish: async (slug: string): Promise<any> => {
+  requestPublish: async (articleId: number): Promise<any> => {
     try {
-      const response = await api.post(`/articles/${slug}/request-publish/`);
+      const response = await api.post(`/articles/${articleId}/request-publish/`, {}, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      console.log('Publish request submitted:', response.data);
       return response.data;
     } catch (error) {
       console.error("Publish request error:", error);
@@ -219,15 +221,15 @@ const articleService = {
     }
   },
 
-  // Updated checkPublishBalance to match your actual wallet API
   checkPublishBalance: async (): Promise<WalletBalanceResponse> => {
     try {
-      const response = await api.get('/wallet/view/');
+      const response = await api.get('/wallet/view/', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
       const walletData: WalletBalance = response.data;
       
-      // Parse the balance string to a number
       const currentBalance = parseFloat(walletData.balance || '0');
-      const requiredBalance = 150; // The fixed requirement from your backend
+      const requiredBalance = 150;
       
       return {
         current_balance: currentBalance,
@@ -236,7 +238,6 @@ const articleService = {
       };
     } catch (error) {
       console.error("Check wallet balance error:", error);
-      // Return default values if API call fails
       return {
         current_balance: 0,
         required_balance: 150,
@@ -247,7 +248,10 @@ const articleService = {
 
   getWriterEarnings: async (): Promise<any> => {
     try {
-      const response = await api.get('/writer/earnings/');
+      const response = await api.get('/writer/earnings/', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      console.log('Writer earnings fetched:', response.data);
       return response.data;
     } catch (error) {
       console.error("Get writer earnings error:", error);
@@ -256,4 +260,4 @@ const articleService = {
   }
 };
 
-export default articleService;
+export default articleService;  
