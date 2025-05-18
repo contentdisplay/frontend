@@ -1,8 +1,10 @@
 import api from '../api';
 
+// Updated adminPromotionService.ts
+
 interface PromotionRequest {
   id: number;
-  user: {
+  user?: {
     id: number;
     username: string;
     email?: string;
@@ -29,6 +31,7 @@ interface UserWallet {
   id: number;
   user_id: number;
   balance: number;
+  reward_points?: number;
   last_transaction_date: string | null;
 }
 
@@ -63,16 +66,6 @@ const adminPromotionService = {
     }
   },
 
-  requestPromotion: async (): Promise<any> => {
-    try {
-      const response = await api.post('/auth/promotions/request/');
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to request promotion:', error.response?.data);
-      throw new Error(error.response?.data?.detail || 'Failed to submit promotion request');
-    }
-  },
-
   getUserProfile: async (userId: number): Promise<UserProfile> => {
     try {
       const response = await api.get(`/auth/admin/users/${userId}/profile/`);
@@ -93,57 +86,24 @@ const adminPromotionService = {
     }
   },
 
-  // Role management functions
-  getRoles: async (): Promise<any[]> => {
+  updateUserRole: async (userId: number, role: string): Promise<any> => {
     try {
-      const response = await api.get('/rbac/roles/');
+      const response = await api.post(`/auth/admin/users/${userId}/role/`, { role });
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to update user role:', error.response?.data);
+      throw new Error(error.response?.data?.detail || 'Failed to update user role');
+    }
+  },
+
+  // Get all available roles (groups)
+  getAvailableRoles: async (): Promise<string[]> => {
+    try {
+      const response = await api.get('/auth/admin/roles/');
       return response.data;
     } catch (error: any) {
       console.error('Failed to fetch roles:', error.response?.data);
-      throw new Error(error.response?.data?.detail || 'Failed to fetch roles');
-    }
-  },
-
-  getRolePermissions: async (roleId: number): Promise<any> => {
-    try {
-      const response = await api.get(`/rbac/roles/${roleId}/permissions/`);
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to fetch role permissions:', error.response?.data);
-      throw new Error(error.response?.data?.detail || 'Failed to fetch role permissions');
-    }
-  },
-
-  updateRolePermissions: async (roleId: number, permissions: any[]): Promise<any> => {
-    try {
-      const response = await api.put(`/rbac/roles/${roleId}/permissions/`, { permissions });
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to update role permissions:', error.response?.data);
-      throw new Error(error.response?.data?.detail || 'Failed to update role permissions');
-    }
-  },
-
-  createRole: async (roleName: string, permissions: any[]): Promise<any> => {
-    try {
-      const response = await api.post('/rbac/roles/create/', { 
-        name: roleName,
-        permissions
-      });
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to create role:', error.response?.data);
-      throw new Error(error.response?.data?.detail || 'Failed to create role');
-    }
-  },
-
-  getPermissionAuditLogs: async (filters: any = {}): Promise<any[]> => {
-    try {
-      const response = await api.get('/rbac/audit-logs/', { params: filters });
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to fetch audit logs:', error.response?.data);
-      throw new Error(error.response?.data?.detail || 'Failed to fetch permission audit logs');
+      throw new Error(error.response?.data?.detail || 'Failed to fetch available roles');
     }
   }
 };

@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import articleService from '@/services/articleService';
 import { useAuth } from '@/context/AuthContext';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import DOMPurify from 'dompurify';
+
 
 interface ArticleCardProps {
   article: Article;
@@ -48,7 +50,14 @@ export default function ArticleCard({
     if (!dateString) return '';
     return formatDistanceToNow(new Date(dateString), { addSuffix: true });
   };
-
+  const createContentPreview = (content: string) => {
+    // Remove HTML tags for preview
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = DOMPurify.sanitize(content);
+    const plainText = tempDiv.textContent || tempDiv.innerText || '';
+    return plainText.length > 150 ? plainText.substring(0, 150) + '...' : plainText;
+  };
+  
   const getReadTime = () => {
     const wordsPerMinute = 200;
     return Math.max(1, Math.ceil((article.word_count || 0) / wordsPerMinute));
@@ -213,7 +222,7 @@ export default function ArticleCard({
         </h3>
 
         <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 mb-3">
-          {article.content ? article.content.substring(0, 150) : ''}
+          {article.content ? createContentPreview(article.content) : ''}
         </p>
 
         <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">

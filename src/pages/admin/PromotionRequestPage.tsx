@@ -8,7 +8,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Check, X, Eye, AlertTriangle, RefreshCw, Wallet, Clock, Info, User } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Check, X, Eye, AlertTriangle, RefreshCw, Wallet, Clock, Info, User, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import adminPromotionService from '@/services/admin/promotionService';
 import { motion } from 'framer-motion';
@@ -42,6 +43,7 @@ interface UserWallet {
   id: number;
   user_id: number;
   balance: number;
+  reward_points?: number;
   last_transaction_date: string | null;
 }
 
@@ -55,10 +57,27 @@ export default function AdminPromotionRequestsPage() {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<'approved' | 'rejected'>('approved');
   const [processingAction, setProcessingAction] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState<string[]>(['normal', 'writer', 'admin']);
+  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [updatingRole, setUpdatingRole] = useState(false);
 
   useEffect(() => {
     fetchPromotions();
+    fetchAvailableRoles();
   }, []);
+
+  const fetchAvailableRoles = async () => {
+    try {
+      const roles = await adminPromotionService.getAvailableRoles();
+      if (roles && roles.length > 0) {
+        setAvailableRoles(roles);
+      }
+    } catch (err) {
+      console.error('Failed to fetch available roles:', err);
+      // Fall back to default roles
+    }
+  };
 
   const fetchPromotions = async () => {
     setLoading(true);
@@ -84,6 +103,7 @@ export default function AdminPromotionRequestsPage() {
       
       setSelectedUserProfile(userProfile);
       setSelectedUserWallet(userWallet);
+      setSelectedRole(userProfile.role);
     } catch (err) {
       toast.error('Failed to fetch user details');
     }
@@ -115,6 +135,30 @@ export default function AdminPromotionRequestsPage() {
       setProcessingAction(false);
     }
   };
+
+  const handleRoleUpdate = async () => {
+    if (!selectedPromotion?.user || !selectedRole) return;
+    
+    setUpdatingRole(true);
+    try {
+      await adminPromotionService.updateUserRole(selectedPromotion.user.id, selectedRole);
+      toast.success(`User role updated to ${selectedRole}`);
+      
+      // Update local state
+      if (selectedUserProfile) {
+        setSelectedUserProfile({
+          ...selectedUserProfile,
+          role: selectedRole
+        });
+      }
+      
+      setRoleDialogOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update user role');
+    } finally {
+      setUpdatingRole(false);
+    }
+  };
   
   // Format date for display
   const formatDate = (dateString: string) => {
@@ -144,6 +188,17 @@ export default function AdminPromotionRequestsPage() {
     return requiredFields.every(field => 
       Boolean((profile as any)[field])
     );
+  };
+
+  const getRoleBadgeClass = (role: string) => {
+    switch(role) {
+      case 'admin':
+        return 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300';
+      case 'writer':
+        return 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300';
+      default:
+        return 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
+    }
   };
 
   return (
@@ -261,10 +316,11 @@ export default function AdminPromotionRequestsPage() {
 
           {selectedPromotion && selectedPromotion.user ? (
             <Tabs defaultValue="profile" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="profile">Profile</TabsTrigger>
                 <TabsTrigger value="wallet">Wallet</TabsTrigger>
                 <TabsTrigger value="request">Request</TabsTrigger>
+                <TabsTrigger value="role">Role Management</TabsTrigger>
               </TabsList>
               
               <TabsContent value="profile" className="mt-4">
@@ -283,7 +339,7 @@ export default function AdminPromotionRequestsPage() {
                       <div>
                         <h3 className="text-lg font-semibold">{selectedUserProfile.first_name} {selectedUserProfile.last_name}</h3>
                         <div className="flex items-center gap-2 mt-1">
-                          <Badge className="capitalize bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300">
+                          <Badge className={`capitalize ${getRoleBadgeClass(selectedUserProfile.role)}`}>
                             {selectedUserProfile.role}
                           </Badge>
                           {isProfileComplete(selectedUserProfile) ? (
@@ -354,6 +410,18 @@ export default function AdminPromotionRequestsPage() {
                       </div>
                       <Wallet className="h-12 w-12 text-blue-600 dark:text-blue-400" />
                     </div>
+                    
+                    {selectedUserWallet.reward_points !== undefined && (
+                      <div className="bg-green-50 dark:bg-green-950/20 rounded-lg p-4 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Reward Points</p>
+                          <p className="text-xl font-bold">{selectedUserWallet.reward_points} points</p>
+                        </div>
+                        <div className="h-10 w-10 bg-green-100 dark:bg-green-900/50 rounded-full flex items-center justify-center">
+                          <span className="text-green-700 dark:text-green-300 text-lg font-bold">+</span>
+                        </div>
+                      </div>
+                    )}
 
                     {selectedUserWallet.last_transaction_date && (
                       <div>
@@ -419,6 +487,90 @@ export default function AdminPromotionRequestsPage() {
                         <div>User's role will be updated to "writer"</div>
                       </li>
                     </ul>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="role" className="mt-4">
+                <div className="space-y-4">
+                  <div className="bg-indigo-50 dark:bg-indigo-950/20 rounded-lg p-5">
+                    <h4 className="font-medium mb-3 flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
+                      <UserPlus className="h-5 w-5" />
+                      Manage User Roles
+                    </h4>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Assign or change the user's role. This will update their permissions and group memberships.
+                    </p>
+
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">Current Role</p>
+                        <Badge className={`capitalize ${getRoleBadgeClass(selectedUserProfile?.role || 'normal')}`}>
+                          {selectedUserProfile?.role || 'normal'} 
+                        </Badge>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-1">Change Role</p>
+                        <div className="flex gap-2">
+                          <Select 
+                            value={selectedRole} 
+                            onValueChange={setSelectedRole}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="normal">Normal User</SelectItem>
+                              <SelectItem value="writer">Content Writer</SelectItem>
+                              <SelectItem value="admin">Admin</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button 
+                            onClick={handleRoleUpdate}
+                            disabled={!selectedRole || selectedRole === selectedUserProfile?.role || updatingRole}
+                          >
+                            {updatingRole ? (
+                              <div className="animate-spin h-4 w-4 border-2 border-t-transparent rounded-full"></div>
+                            ) : (
+                              'Update'
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Separator className="my-4" />
+
+                    <div className="space-y-3">
+                      <h5 className="font-medium text-sm">Role Permissions</h5>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm">
+                          <h6 className="font-medium text-sm mb-2">Normal User</h6>
+                          <ul className="text-xs text-muted-foreground space-y-1">
+                            <li>• View content</li>
+                            <li>• Update profile</li>
+                            <li>• Request promotion</li>
+                          </ul>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm border-2 border-green-100 dark:border-green-900/30">
+                          <h6 className="font-medium text-sm mb-2 text-green-700 dark:text-green-400">Content Writer</h6>
+                          <ul className="text-xs text-muted-foreground space-y-1">
+                            <li>• Create articles</li>
+                            <li>• Edit own articles</li>
+                            <li>• Earn from content</li>
+                          </ul>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm">
+                          <h6 className="font-medium text-sm mb-2 text-purple-700 dark:text-purple-400">Admin</h6>
+                          <ul className="text-xs text-muted-foreground space-y-1">
+                            <li>• Full system access</li>
+                            <li>• Manage all users</li>
+                            <li>• Approve promotions</li>
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </TabsContent>

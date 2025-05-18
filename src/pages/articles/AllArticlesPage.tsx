@@ -1,16 +1,4 @@
-const handleFilter = (filter: string) => {
-  setActiveFilter(filter);
-  setSortBy(filter);
-  // Reset to first page when changing filters
-  setCurrentPage(1);
-};
-
-const handlePageChange = (page: number) => {
-  const currentTotalPages = getCurrentTotalPages();
-  if (page < 1 || page > currentTotalPages) return;
-  setCurrentPage(page);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-};// pages/articles/ArticlesListPage.tsx
+;// pages/articles/ArticlesListPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -61,13 +49,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
 export default function ArticlesListPage() {
+const [activeFilter, setActiveFilter] = useState('latest');
 const navigate = useNavigate();
 const { toast } = useToast();
 const [articles, setArticles] = useState<Article[]>([]);
 const [trendingArticles, setTrendingArticles] = useState<Article[]>([]);
 const [isLoading, setIsLoading] = useState(true);
 const [searchQuery, setSearchQuery] = useState('');
-const [activeFilter, setActiveFilter] = useState('latest');
 const [bookmarkedArticles, setBookmarkedArticles] = useState<number[]>([]);
 const [likedArticles, setLikedArticles] = useState<number[]>([]);
 const [currentPage, setCurrentPage] = useState(1);
@@ -123,6 +111,20 @@ const handleRefresh = () => {
   setIsRefreshing(true);
   fetchData();
 };
+
+const handleFilter = (filter: string) => {
+  setActiveFilter(filter);
+  setSortBy(filter);
+  // Reset to first page when changing filters
+  setCurrentPage(1);
+};
+
+const handlePageChange = (page: number) => {
+  const currentTotalPages = getCurrentTotalPages();
+  if (page < 1 || page > currentTotalPages) return;
+  setCurrentPage(page);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
 const handleSearch = (e: React.FormEvent) => {
   e.preventDefault();
