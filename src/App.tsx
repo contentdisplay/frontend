@@ -37,7 +37,8 @@ import ArticleCreatePage from './pages/articles/ArticleCreatePage'; // Import th
 import ArticleEditPage from './pages/articles/EditArticlePage'; // Import the edit component
 import WriterRequestPage from './pages/promotion/WriterRequestPage';
 import WriterArticlePage from './pages/articles/WriterArticlePage';
-import WriterArticleDetailPage from './pages/articles/WriterArticleDetailPage';
+// import WriterArticleDetailPage from './pages/articles/WriterArticleDetailPage';
+import WriterArticleDetailPage from '@/pages/writer/WriterArticleDetailPage';
 
 // Admin Pages
 import UsersManagementPage from './pages/admin/UsersManagementPage';
@@ -105,7 +106,7 @@ const App = () => (
                 <Route path="dashboard" element={<WriterDashboard />} />
                 {/* Use the updated ArticleCreatePage component */}
                 <Route path="articles/create" element={<ArticleCreatePage />} />
-                <Route path="articles/:slug" element={<WriterArticleDetailPage />} />
+                <Route path="/writer/articles/:slug" element={<WriterArticleDetailPage />} />
                 <Route path="articles/edit/:slug" element={<ArticleEditPage />} />
                 <Route path="articles" element={<WriterArticlePage />} />
                 <Route path="wallet" element={<WalletPage />} />

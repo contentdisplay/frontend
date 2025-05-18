@@ -1,4 +1,4 @@
-// pages/UserProfilePage.tsx
+// Updated UserProfilePage.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -140,12 +140,16 @@ export default function UserProfilePage() {
       setIsLoadingProfile(true);
       const profile = await profileService.getProfile();
       setUserProfile(profile);
+      
+      // Format age to string for the form
+      const ageString = profile.age ? String(profile.age) : undefined;
+      
       profileForm.reset({
         first_name: profile.first_name || '',
         last_name: profile.last_name || '',
         phone_number: profile.phone_number || '',
         address: profile.address || '',
-        age: profile.age ?? undefined,
+        age: ageString,
         gender: profile.gender,
         website: profile.website || '',
         bio: profile.bio || '',
@@ -210,7 +214,13 @@ export default function UserProfilePage() {
   const onProfileSubmit = async (data: ProfileFormValues) => {
     setIsLoading(true);
     try {
-      const updatedProfile = await profileService.updateProfile(data);
+      // Convert age string to number for API
+      const updatedData = {
+        ...data,
+        age: data.age ? parseInt(data.age as string, 10) : undefined
+      };
+      
+      const updatedProfile = await profileService.updateProfile(updatedData);
       setUserProfile(updatedProfile);
       setProfileCompleteness(profileService.getProfileCompleteness(updatedProfile));
       setAvatarPreview(typeof updatedProfile.photo === 'string' ? updatedProfile.photo : avatarPreview);
@@ -292,6 +302,14 @@ export default function UserProfilePage() {
       hour: '2-digit',
       minute: '2-digit'
     }).format(date);
+  };
+
+  // Fix for gender selection to prevent focus recursion
+  const handleGenderChange = (value: string) => {
+    // Use setTimeout to break the synchronous focus chain
+    setTimeout(() => {
+      profileForm.setValue('gender', value as 'male' | 'female' | 'other');
+    }, 0);
   };
 
   return (
@@ -414,6 +432,9 @@ export default function UserProfilePage() {
                         <DialogTitle className="text-2xl bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600">
                           Edit Profile
                         </DialogTitle>
+                        <DialogDescription>
+                          Update your profile information to complete your account
+                        </DialogDescription>
                       </DialogHeader>
                       <Form {...profileForm}>
                         <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-6">
@@ -523,28 +544,23 @@ export default function UserProfilePage() {
                                 </FormItem>
                               )}
                             />
-                            <FormField
-                              control={profileForm.control}
-                              name="gender"
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Gender</FormLabel>
-                                  <Select onValueChange={field.onChange} value={field.value}>
-                                    <FormControl>
-                                      <SelectTrigger className="bg-white/50 dark:bg-gray-950/50">
-                                        <SelectValue placeholder="Select gender" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                      <SelectItem value="male">Male</SelectItem>
-                                      <SelectItem value="female">Female</SelectItem>
-                                      <SelectItem value="other">Other</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                  <FormMessage />
-                                </FormItem>
+                            {/* Fix for gender selection recursive error */}
+                            <FormItem>
+                              <FormLabel>Gender</FormLabel>
+                              <select
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-white/50 dark:bg-gray-950/50"
+                                onChange={(e) => handleGenderChange(e.target.value)}
+                                value={profileForm.getValues('gender') || ''}
+                              >
+                                <option value="" disabled>Select gender</option>
+                                <option value="male">Male</option>
+                                <option value="female">Female</option>
+                                <option value="other">Other</option>
+                              </select>
+                              {profileForm.formState.errors.gender && (
+                                <p className="text-sm font-medium text-destructive">{profileForm.formState.errors.gender.message}</p>
                               )}
-                            />
+                            </FormItem>
                           </div>
                           <FormField
                             control={profileForm.control}
@@ -645,189 +661,188 @@ export default function UserProfilePage() {
                               className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
                             >
                               {isLoading ? (
-                             // pages/UserProfilePage.tsx (continued)
-                             <span className="flex items-center gap-2">
-                             <span className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
-                             Saving...
-                           </span>
-                         ) : (
-                           <span className="flex items-center gap-2">
-                             <Check className="h-4 w-4" />
-                             Save Changes
-                           </span>
-                         )}
-                       </Button>
-                     </div>
-                   </form>
-                 </Form>
-               </DialogContent>
-             </Dialog>
+                                <span className="flex items-center gap-2">
+                                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
+                                  Saving...
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-2">
+                                  <Check className="h-4 w-4" />
+                                  Save Changes
+                                </span>
+                              )}
+                            </Button>
+                          </div>
+                        </form>
+                      </Form>
+                    </DialogContent>
+                  </Dialog>
 
-             {canRequestPromotion && (
-               <Dialog open={isPromotionDialogOpen} onOpenChange={setIsPromotionDialogOpen}>
-                 <DialogTrigger asChild>
-                   <Button variant="outline" className="flex items-center gap-2 border-purple-300 text-purple-700 hover:bg-purple-50 hover:text-purple-800 dark:border-purple-800 dark:text-purple-400 dark:hover:bg-purple-900/20">
-                     <Award className="h-4 w-4" />
-                     Become a Content Writer
-                   </Button>
-                 </DialogTrigger>
-                 <DialogContent className="sm:max-w-[500px]">
-                   <DialogHeader>
-                     <DialogTitle>Become a Content Writer</DialogTitle>
-                     <DialogDescription>
-                       Upgrade your account to access content creation features.
-                     </DialogDescription>
-                   </DialogHeader>
-                   <div className="space-y-4 py-4">
-                     <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
-                       <h4 className="font-semibold text-purple-800 dark:text-purple-300 flex items-center gap-2">
-                         <Award className="h-5 w-5" />
-                         Content Writer Benefits
-                       </h4>
-                       <ul className="mt-2 space-y-2 text-purple-700 dark:text-purple-400">
-                         <li className="flex items-start gap-2">
-                           <Check className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                           <span>Create and publish articles</span>
-                         </li>
-                         <li className="flex items-start gap-2">
-                           <Check className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                           <span>Earn from your content</span>
-                         </li>
-                         <li className="flex items-start gap-2">
-                           <Check className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                           <span>Access exclusive writing tools</span>
-                         </li>
-                       </ul>
-                     </div>
-                     
-                     <Alert className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700/50">
-                       <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                       <AlertTitle className="text-amber-800 dark:text-amber-300">Promotion Fee</AlertTitle>
-                       <AlertDescription className="text-amber-700 dark:text-amber-400">
-                         A one-time fee of 50 credits will be deducted from your wallet upon approval.
-                         <div className="mt-2 font-medium">
-                           Current balance: <span className="text-green-600 dark:text-green-400">{walletBalance ?? 0} credits</span>
-                         </div>
-                       </AlertDescription>
-                     </Alert>
-                   </div>
-                   <DialogFooter>
-                     <Button variant="outline" onClick={() => setIsPromotionDialogOpen(false)}>
-                       Cancel
-                     </Button>
-                     <Button
-                       onClick={handleRequestPromotion}
-                       disabled={isRequestingPromotion}
-                       className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                     >
-                       {isRequestingPromotion ? (
-                         <span className="flex items-center gap-2">
-                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
-                           Processing...
-                         </span>
-                       ) : (
-                         <span className="flex items-center gap-2">
-                           <Award className="h-4 w-4" />
-                           Request Promotion
-                         </span>
-                       )}
-                     </Button>
-                   </DialogFooter>
-                 </DialogContent>
-               </Dialog>
-             )}
-             
-             {/* Wallet button */}
-             <Button 
-               variant="outline" 
-               className="flex items-center gap-2 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20"
-               onClick={() => navigate('/wallet')}
-             >
-               <DollarSign className="h-4 w-4" />
-               <span className="flex items-center gap-1">
-                 Wallet
-                 {walletBalance !== null && (
-                   <span className="ml-1 px-1.5 py-0.5 bg-green-100 text-green-800 text-xs rounded dark:bg-green-900/30 dark:text-green-300">
-                     {walletBalance}
-                   </span>
-                 )}
-               </span>
-             </Button>
-           </div>
-         </div>
-       </div>
-     )}
-   </CardContent>
-   
-   {/* Transactions section */}
-   <Separator className="my-2" />
-   <CardHeader className="pb-0">
-     <CardTitle className="text-lg flex items-center gap-2">
-       <DollarSign className="h-5 w-5 text-gray-500" />
-       Recent Transactions
-     </CardTitle>
-   </CardHeader>
-   <CardContent className="p-6">
-     {isLoadingWallet ? (
-       <div className="space-y-3 animate-pulse">
-         {[1, 2, 3].map((i) => (
-           <div key={i} className="flex justify-between items-center py-2">
-             <div className="h-5 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
-             <div className="h-5 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
-           </div>
-         ))}
-       </div>
-     ) : recentTransactions.length === 0 ? (
-       <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-         No transactions found. Visit your wallet to make a deposit.
-       </div>
-     ) : (
-       <div className="space-y-3">
-         {recentTransactions.map((transaction) => (
-           <div key={transaction.id} className="flex justify-between items-center py-2 border-b dark:border-gray-700 last:border-0">
-             <div className="flex items-center gap-3">
-               <div className={`p-2 rounded-full ${
-                 transaction.transaction_type === 'deposit' || transaction.transaction_type === 'earn' 
-                   ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' 
-                   : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
-               }`}>
-                 {transaction.transaction_type === 'deposit' || transaction.transaction_type === 'earn' ? (
-                   <DollarSign className="h-4 w-4" />
-                 ) : (
-                   <AlertCircle className="h-4 w-4" />
-                 )}
-               </div>
-               <div>
-                 <div className="font-medium capitalize">{transaction.transaction_type}</div>
-                 <div className="text-xs text-gray-500 dark:text-gray-400">{formatDate(transaction.date)}</div>
-               </div>
-             </div>
-             <span className={`font-semibold ${
-               transaction.transaction_type === 'deposit' || transaction.transaction_type === 'earn' 
-                 ? 'text-green-600 dark:text-green-400' 
-                 : 'text-red-600 dark:text-red-400'
-             }`}>
-               {transaction.transaction_type === 'deposit' || transaction.transaction_type === 'earn' 
-                 ? `+${transaction.amount}` 
-                 : `-${transaction.amount}`
-               }
-             </span>
-           </div>
-         ))}
-         
-         <div className="flex justify-center pt-3">
-           <Button 
-             variant="ghost" 
-             className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20"
-             onClick={() => navigate('/wallet')}
-           >
-             View All Transactions
-           </Button>
-         </div>
-       </div>
-     )}
-   </CardContent>
- </Card>
-</div>
-);
+                  {canRequestPromotion && (
+                    <Dialog open={isPromotionDialogOpen} onOpenChange={setIsPromotionDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="flex items-center gap-2 border-purple-300 text-purple-700 hover:bg-purple-50 hover:text-purple-800 dark:border-purple-800 dark:text-purple-400 dark:hover:bg-purple-900/20">
+                          <Award className="h-4 w-4" />
+                          Become a Content Writer
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[500px]">
+                        <DialogHeader>
+                          <DialogTitle>Become a Content Writer</DialogTitle>
+                          <DialogDescription>
+                            Upgrade your account to access content creation features.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
+                            <h4 className="font-semibold text-purple-800 dark:text-purple-300 flex items-center gap-2">
+                              <Award className="h-5 w-5" />
+                              Content Writer Benefits
+                            </h4>
+                            <ul className="mt-2 space-y-2 text-purple-700 dark:text-purple-400">
+                              <li className="flex items-start gap-2">
+                                <Check className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                <span>Create and publish articles</span>
+                              </li>
+                              <li className="flex items-start gap-2">
+                                <Check className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                <span>Earn from your content</span>
+                              </li>
+                              <li className="flex items-start gap-2">
+                                <Check className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                                <span>Access exclusive writing tools</span>
+                              </li>
+                            </ul>
+                          </div>
+                          
+                          <Alert className="bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-700/50">
+                            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                            <AlertTitle className="text-amber-800 dark:text-amber-300">Promotion Fee</AlertTitle>
+                            <AlertDescription className="text-amber-700 dark:text-amber-400">
+                              A one-time fee of 50 credits will be deducted from your wallet upon approval.
+                              <div className="mt-2 font-medium">
+                                Current balance: <span className="text-green-600 dark:text-green-400">{walletBalance ?? 0} credits</span>
+                              </div>
+                            </AlertDescription>
+                          </Alert>
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setIsPromotionDialogOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={handleRequestPromotion}
+                            disabled={isRequestingPromotion}
+                            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                          >
+                            {isRequestingPromotion ? (
+                              <span className="flex items-center gap-2">
+                                <span className="h-4 w-4 animate-spin rounded-full border-2 border-t-transparent"></span>
+                                Processing...
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-2">
+                                <Award className="h-4 w-4" />
+                                Request Promotion
+                              </span>
+                            )}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                  
+                  {/* Wallet button */}
+                  <Button 
+                    variant="outline" 
+                    className="flex items-center gap-2 border-green-300 text-green-700 hover:bg-green-50 hover:text-green-800 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20"
+                    onClick={() => navigate('/wallet')}
+                  >
+                    <DollarSign className="h-4 w-4" />
+                    <span className="flex items-center gap-1">
+                      Wallet
+                      {walletBalance !== null && (
+                        <span className="ml-1 px-1.5 py-0.5 bg-green-100 text-green-800 text-xs rounded dark:bg-green-900/30 dark:text-green-300">
+                          {walletBalance}
+                        </span>
+                      )}
+                    </span>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+        
+        {/* Transactions section */}
+        <Separator className="my-2" />
+        <CardHeader className="pb-0">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <DollarSign className="h-5 w-5 text-gray-500" />
+            Recent Transactions
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          {isLoadingWallet ? (
+            <div className="space-y-3 animate-pulse">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex justify-between items-center py-2">
+                  <div className="h-5 w-32 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                  <div className="h-5 w-24 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                </div>
+              ))}
+            </div>
+          ) : recentTransactions.length === 0 ? (
+            <div className="text-center py-4 text-gray-500 dark:text-gray-400">
+              No transactions found. Visit your wallet to make a deposit.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {recentTransactions.map((transaction) => (
+                <div key={transaction.id} className="flex justify-between items-center py-2 border-b dark:border-gray-700 last:border-0">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-full ${
+                      transaction.transaction_type === 'deposit' || transaction.transaction_type === 'earn' 
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' 
+                        : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                    }`}>
+                      {transaction.transaction_type === 'deposit' || transaction.transaction_type === 'earn' ? (
+                        <DollarSign className="h-4 w-4" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-medium capitalize">{transaction.transaction_type}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{formatDate(transaction.date)}</div>
+                    </div>
+                  </div>
+                  <span className={`font-semibold ${
+                    transaction.transaction_type === 'deposit' || transaction.transaction_type === 'earn' 
+                      ? 'text-green-600 dark:text-green-400' 
+                      : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {transaction.transaction_type === 'deposit' || transaction.transaction_type === 'earn' 
+                      ? `+${transaction.amount}` 
+                      : `-${transaction.amount}`
+                    }
+                  </span>
+                </div>
+              ))}
+              
+              <div className="flex justify-center pt-3">
+                <Button 
+                  variant="ghost" 
+                  className="text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20"
+                  onClick={() => navigate('/wallet')}
+                >
+                  View All Transactions
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
 }

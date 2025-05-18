@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Article, ArticleFormData } from '@/services/articleService';
-import { X, UploadCloud, Wallet, AlertCircle, Save, Loader2, CheckCircle, ArrowRight, Clock } from 'lucide-react';
+import { X, UploadCloud, Wallet, AlertCircle, Save, Loader2, CheckCircle, ArrowRight, Clock, BookOpen, Award } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import articleService from '@/services/articleService';
@@ -36,12 +36,32 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import 'react-quill/dist/quill.snow.css';
+import { Card, CardContent } from '@/components/ui/card';
 
 // Function to count words, stripping HTML tags
 const countWords = (text: string): number => {
   if (!text) return 0;
   const plainText = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   return plainText.split(' ').filter(word => word.length > 0).length;
+};
+
+// Function to estimate reading time and rewards based on word count (matching backend logic)
+const estimateReadingTimeAndReward = (wordCount: number) => {
+  let readingTimeMinutes = 0;
+  let collectableRewardPoints = 0;
+  
+  if (wordCount < 200) {
+    readingTimeMinutes = 2;
+    collectableRewardPoints = 10;
+  } else if (wordCount >= 200 && wordCount <= 500) {
+    readingTimeMinutes = 5;
+    collectableRewardPoints = 20;
+  } else {
+    readingTimeMinutes = 15;
+    collectableRewardPoints = 30;
+  }
+  
+  return { readingTimeMinutes, collectableRewardPoints };
 };
 
 // Schema definitions
@@ -95,6 +115,11 @@ export default function ArticleForm({
   const [draftSaved, setDraftSaved] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   
+  // Reading time and reward metrics state
+  const [readingTimeMinutes, setReadingTimeMinutes] = useState<number>(0);
+  const [collectableRewardPoints, setCollectableRewardPoints] = useState<number>(0);
+  const [usingBackendMetrics, setUsingBackendMetrics] = useState<boolean>(false);
+  
   // UI loading states
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
@@ -127,6 +152,62 @@ export default function ArticleForm({
       checkWalletBalance();
     }
   }, [mode, initialData]);
+
+  // Update metrics from backend when initialData is available
+  useEffect(() => {
+    if (initialData) {
+      // Check if backend provides these values
+      if (initialData.reading_time_minutes && initialData.collectable_reward_points) {
+        setReadingTimeMinutes(initialData.reading_time_minutes);
+        setCollectableRewardPoints(initialData.collectable_reward_points);
+        setUsingBackendMetrics(true);
+      } else {
+        // Fall back to frontend calculation based on word count
+        const { readingTimeMinutes, collectableRewardPoints } = estimateReadingTimeAndReward(
+          initialData.word_count || countWords(initialData.content)
+        );
+        setReadingTimeMinutes(readingTimeMinutes);
+        setCollectableRewardPoints(collectableRewardPoints);
+        setUsingBackendMetrics(false);
+      }
+    } else {
+      // Reset values for new articles
+      const { readingTimeMinutes, collectableRewardPoints } = estimateReadingTimeAndReward(0);
+      setReadingTimeMinutes(readingTimeMinutes);
+      setCollectableRewardPoints(collectableRewardPoints);
+      setUsingBackendMetrics(false);
+    }
+  }, [initialData]);
+
+  // Update metrics when createdArticle is set (after creation/update)
+  useEffect(() => {
+    if (createdArticle) {
+      if (createdArticle.reading_time_minutes && createdArticle.collectable_reward_points) {
+        setReadingTimeMinutes(createdArticle.reading_time_minutes);
+        setCollectableRewardPoints(createdArticle.collectable_reward_points);
+        setUsingBackendMetrics(true);
+      }
+    }
+  }, [createdArticle]);
+
+  // Update metrics as user edits content (real-time feedback)
+  useEffect(() => {
+    // If actively editing, calculate metrics based on content
+    const subscription = form.watch((value, { name }) => {
+      if (name === 'content' || !usingBackendMetrics) {
+        const content = value.content as string || '';
+        const wordCount = countWords(content);
+        const { readingTimeMinutes, collectableRewardPoints } = estimateReadingTimeAndReward(wordCount);
+        
+        setReadingTimeMinutes(readingTimeMinutes);
+        setCollectableRewardPoints(collectableRewardPoints);
+        // Mark as using frontend calculation while editing
+        setUsingBackendMetrics(false);
+      }
+    });
+    
+    return () => subscription.unsubscribe();
+  }, [form, usingBackendMetrics]);
 
   // Auto-save functionality
   useEffect(() => {
@@ -166,6 +247,12 @@ export default function ArticleForm({
             setDraftSaved(true);
             setLastSaved(new Date(parsedDraft.timestamp).toLocaleTimeString());
             toast.info('Draft restored from your last session');
+            
+            // Calculate metrics for restored draft
+            const wordCount = countWords(parsedDraft.content || '');
+            const { readingTimeMinutes, collectableRewardPoints } = estimateReadingTimeAndReward(wordCount);
+            setReadingTimeMinutes(readingTimeMinutes);
+            setCollectableRewardPoints(collectableRewardPoints);
           }
         } catch (e) {
           console.error('Failed to restore draft:', e);
@@ -246,11 +333,27 @@ export default function ArticleForm({
         const article = await articleService.createArticle(formData, true);
         localStorage.removeItem('article_draft');
         setCreatedArticle(article);
+        
+        // Update metrics with backend values if available
+        if (article.reading_time_minutes && article.collectable_reward_points) {
+          setReadingTimeMinutes(article.reading_time_minutes);
+          setCollectableRewardPoints(article.collectable_reward_points);
+          setUsingBackendMetrics(true);
+        }
+        
         setSuccessAction('draft');
         setShowSuccessDialog(true);
       } else {
         if (!initialData?.slug) throw new Error('Article slug not provided');
-        await articleService.updateArticle(initialData.slug, formData, true);
+        const updatedArticle = await articleService.updateArticle(initialData.slug, formData, true);
+        
+        // Update metrics with backend values if available
+        if (updatedArticle.reading_time_minutes && updatedArticle.collectable_reward_points) {
+          setReadingTimeMinutes(updatedArticle.reading_time_minutes);
+          setCollectableRewardPoints(updatedArticle.collectable_reward_points);
+          setUsingBackendMetrics(true);
+        }
+        
         setSuccessAction('draft');
         setShowSuccessDialog(true);
       }
@@ -290,6 +393,14 @@ export default function ArticleForm({
       if (!article) return;
       
       setCreatedArticle(article);
+      
+      // Update metrics with backend values if available
+      if (article.reading_time_minutes && article.collectable_reward_points) {
+        setReadingTimeMinutes(article.reading_time_minutes);
+        setCollectableRewardPoints(article.collectable_reward_points);
+        setUsingBackendMetrics(true);
+      }
+      
       if (mode === 'create') {
         localStorage.removeItem('article_draft');
         setSuccessAction('created');
@@ -344,12 +455,27 @@ export default function ArticleForm({
       };
       
       let articleId = initialData?.id || createdArticle?.id;
+      let updatedArticle;
       
       // Update the article first if needed
       if (mode === 'edit' && initialData?.slug) {
-        await articleService.updateArticle(initialData.slug, formData);
+        updatedArticle = await articleService.updateArticle(initialData.slug, formData);
+        
+        // Update metrics with backend values if available
+        if (updatedArticle.reading_time_minutes && updatedArticle.collectable_reward_points) {
+          setReadingTimeMinutes(updatedArticle.reading_time_minutes);
+          setCollectableRewardPoints(updatedArticle.collectable_reward_points);
+          setUsingBackendMetrics(true);
+        }
       } else if (mode === 'create' && createdArticle?.slug) {
-        await articleService.updateArticle(createdArticle.slug, formData);
+        updatedArticle = await articleService.updateArticle(createdArticle.slug, formData);
+        
+        // Update metrics with backend values if available
+        if (updatedArticle.reading_time_minutes && updatedArticle.collectable_reward_points) {
+          setReadingTimeMinutes(updatedArticle.reading_time_minutes);
+          setCollectableRewardPoints(updatedArticle.collectable_reward_points);
+          setUsingBackendMetrics(true);
+        }
       }
       
       // Then request publishing
@@ -428,6 +554,7 @@ export default function ArticleForm({
     setShowPublishConfirm(true);
   };
 
+  // Get word count for validation and UI display
   const wordCount = countWords(form.watch('content'));
 
   return (
@@ -490,19 +617,76 @@ export default function ArticleForm({
           </AlertDescription>
         </Alert>
 
-        {/* Word count indicator */}
-        <div className="flex justify-end">
-          <Badge variant="outline" className={cn(
-            "text-sm font-medium px-3 py-1 rounded-full", 
-            wordCount < 100 ? "bg-red-100 text-red-800 border-red-300" : 
-            wordCount < 500 ? "bg-yellow-100 text-yellow-800 border-yellow-300" : 
-            "bg-green-100 text-green-800 border-green-300"
+        {/* Word count, reading time, and reward metrics */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className={cn(
+            "border rounded-lg shadow-sm transition-colors",
+            wordCount < 100 ? "bg-red-50 border-red-200" : 
+            wordCount < 500 ? "bg-yellow-50 border-yellow-200" : 
+            "bg-green-50 border-green-200"
           )}>
-            {wordCount} words
-            {wordCount < 100 && " (minimum 100 required)"}
-            {wordCount >= 100 && wordCount < 500 && " (aim for at least 500)"}
-            {wordCount >= 500 && " (great length!)"}
-          </Badge>
+            <CardContent className="p-4 flex flex-col items-center justify-center text-center">
+              <div className={cn(
+                "w-12 h-12 rounded-full flex items-center justify-center mb-2",
+                wordCount < 100 ? "bg-red-100" : 
+                wordCount < 500 ? "bg-yellow-100" : 
+                "bg-green-100"
+              )}>
+                <AlertCircle className={cn(
+                  "h-6 w-6",
+                  wordCount < 100 ? "text-red-600" : 
+                  wordCount < 500 ? "text-yellow-600" : 
+                  "text-green-600"
+                )} />
+              </div>
+              <h3 className="font-semibold text-gray-800">Word Count</h3>
+              <p className={cn(
+                "text-2xl font-bold",
+                wordCount < 100 ? "text-red-700" : 
+                wordCount < 500 ? "text-yellow-700" : 
+                "text-green-700"
+              )}>
+                {wordCount}
+              </p>
+              <p className="text-sm mt-1">
+                {wordCount < 100 && "Minimum 100 required"}
+                {wordCount >= 100 && wordCount < 500 && "Good! Aim for 500+"}
+                {wordCount >= 500 && "Excellent length!"}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-blue-50 border-blue-200 border rounded-lg shadow-sm">
+            <CardContent className="p-4 flex flex-col items-center justify-center text-center">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mb-2">
+                <BookOpen className="h-6 w-6 text-blue-600" />
+              </div>
+              <h3 className="font-semibold text-gray-800">Reading Time</h3>
+              <p className="text-2xl font-bold text-blue-700">
+                {readingTimeMinutes} min
+              </p>
+              <p className="text-sm mt-1 text-blue-600">
+                Estimated time to read
+                {usingBackendMetrics && " (calculated by server)"}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-purple-50 border-purple-200 border rounded-lg shadow-sm">
+            <CardContent className="p-4 flex flex-col items-center justify-center text-center">
+              <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center mb-2">
+                <Award className="h-6 w-6 text-purple-600" />
+              </div>
+              <h3 className="font-semibold text-gray-800">Reader Reward</h3>
+              <p className="text-2xl font-bold text-purple-700">
+                {collectableRewardPoints} points
+              </p>
+              <p className="text-sm mt-1 text-purple-600">
+                Points readers can earn
+                {usingBackendMetrics && " (calculated by server)"}
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Thumbnail upload */}
@@ -778,20 +962,6 @@ export default function ArticleForm({
                     <ArrowRight className="mr-2 h-4 w-4" />
                     View My Articles
                   </Button>
-                  
-                  {/* {isPublishable && (
-                    <Button
-                      variant="outline"
-                      className="w-full text-amber-600 border-amber-300 hover:bg-amber-50"
-                      onClick={() => {
-                        setShowSuccessDialog(false);
-                        initiatePublishRequest();
-                      }}
-                    >
-                      <Wallet className="mr-2 h-4 w-4" />
-                      Request Publishing (₹{requiredBalance})
-                    </Button>
-                  )} */}
                   
                   {!isPublishable && (
                     <Button

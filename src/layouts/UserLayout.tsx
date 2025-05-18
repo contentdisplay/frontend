@@ -49,15 +49,16 @@ export default function UserLayout() {
       path: "/dashboard",
     },
     {
-      icon: BookOpen,
-      label: "Articles",
-      path: "/articles",
-    },
-    {
       icon: Wallet,
       label: "Wallet",
       path: "/wallet",
     },
+    {
+      icon: BookOpen,
+      label: "Articles",
+      path: "/articles",
+    },
+   
     {
       icon: User,
       label: "Profile",

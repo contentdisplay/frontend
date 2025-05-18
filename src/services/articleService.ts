@@ -58,6 +58,13 @@ export interface ArticleReadingState {
   start_time: string;
   is_rewarded: boolean;
 }
+// Add this interface to your service
+export interface GiftPointsRequest {
+  recipient_id: number;
+  amount: number;
+  article_id: number;
+  message?: string;
+}
 
 const articleService = {
   getPublishedArticles: async (page = 1, pageSize = 10): Promise<{results: Article[], count: number}> => {
@@ -444,7 +451,70 @@ const articleService = {
       console.error("Get writer earnings error:", error);
       throw error;
     }
+  },
+  getArticleEarnings: async (articleId: number): Promise<any> => {
+    try {
+      const response = await api.get(`/articles/${articleId}/earnings/`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to fetch earnings for article ${articleId}:`, error);
+      // Return default values if API fails
+      return {
+        points_earned: 0,
+        uncollected_reads: 0,
+        total_reads: 0
+      };
+    }
+  },
+  
+  // Collect reward for an article
+  collectReward: async (articleId: number): Promise<any> => {
+    try {
+      const response = await api.post(`/articles/${articleId}/collect/`, {}, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      console.log('Reward collected:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Collect reward error:", error);
+      
+      const errorObj = error as any;
+      const errorMessage = errorObj?.response?.data?.detail || 'Failed to collect reward';
+      
+      // Customize error messages for better user experience
+      if (errorMessage.includes('Must read for at least 15 minutes')) {
+        throw new Error('You need to read the article for the minimum required time to claim the reward.');
+      } else if (errorMessage.includes('Reward already collected')) {
+        throw new Error('You have already claimed the reward for this article.');
+      }
+      
+      throw error;
+    }
+  },
+  collectArticleReward: async (articleId: number): Promise<any> => {
+    try {
+      const response = await api.post(`/articles/${articleId}/earnings/collect/`, {}, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      console.log('Article rewards collected:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to collect rewards for article ${articleId}:`, error);
+      throw error;
+    }
+  },
+  collectArticleReward: async (articleId: number): Promise<any> => {
+  try {
+    const response = await api.post(`/articles/${articleId}/earnings/collect/`, {}, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+    });
+    console.log('Article rewards collected:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to collect rewards for article ${articleId}:`, error);
+    throw error;
   }
+},
 };
 
 export default articleService;

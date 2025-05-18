@@ -1,12 +1,8 @@
-// components/articles/WriterRewardsSection.tsx
-import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+// components/articles/WriterRewardSection.tsx
+import React from 'react';
+import { Award, ThumbsUp, Bookmark, Users, Gift } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
-import { Award, BookOpen, Heart, Bookmark, Loader2, Check } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface WriterRewardsSectionProps {
   articleId: number;
@@ -16,7 +12,7 @@ interface WriterRewardsSectionProps {
   earnedPoints: number;
   uncollectedReads: number;
   isOwner: boolean;
-  onCollectReward: () => Promise<void>;
+  onCollectReward: () => void;
 }
 
 export const WriterRewardsSection: React.FC<WriterRewardsSectionProps> = ({
@@ -29,125 +25,66 @@ export const WriterRewardsSection: React.FC<WriterRewardsSectionProps> = ({
   isOwner,
   onCollectReward
 }) => {
-  const [isCollecting, setIsCollecting] = useState(false);
-  const [collectError, setCollectError] = useState<string | null>(null);
-  
-  const handleCollectReward = async () => {
-    if (isCollecting || uncollectedReads <= 0) return;
-    
-    try {
-      setIsCollecting(true);
-      setCollectError(null);
-      await onCollectReward();
-    } catch (error: any) {
-      setCollectError(error.message || 'Failed to collect rewards');
-    } finally {
-      setIsCollecting(false);
-    }
-  };
-  
-  if (!isOwner) return null;
-  
   return (
-    <Card className="border-2 border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-gray-900 mb-6">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center text-xl text-amber-800 dark:text-amber-300">
-          <Award className="mr-2 h-5 w-5 text-amber-600 dark:text-amber-400" />
-          Writer Earnings Dashboard
-        </CardTitle>
+    <Card className="mt-8 shadow-md">
+      <CardHeader>
+        <CardTitle className="text-xl text-center">Article Performance & Rewards</CardTitle>
       </CardHeader>
-      
-      <CardContent className="pb-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Total Reads</span>
-              <BookOpen className="h-4 w-4 text-blue-600" />
-            </div>
-            <div className="text-2xl font-bold">{totalReads}</div>
-            <Progress value={Math.min(totalReads * 2, 100)} className="h-1.5 mt-2" />
+      <CardContent>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-blue-50 rounded-lg p-4 text-center">
+            <Users className="h-6 w-6 text-blue-600 mx-auto mb-2" />
+            <p className="text-sm text-blue-700">Total Reads</p>
+            <p className="text-2xl font-bold text-blue-800">{totalReads}</p>
           </div>
           
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Total Likes</span>
-              <Heart className="h-4 w-4 text-rose-600" />
-            </div>
-            <div className="text-2xl font-bold">{totalLikes}</div>
-            <Progress value={Math.min(totalLikes * 5, 100)} className="h-1.5 mt-2" />
+          <div className="bg-pink-50 rounded-lg p-4 text-center">
+            <ThumbsUp className="h-6 w-6 text-pink-600 mx-auto mb-2" />
+            <p className="text-sm text-pink-700">Total Likes</p>
+            <p className="text-2xl font-bold text-pink-800">{totalLikes}</p>
           </div>
           
-          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Total Bookmarks</span>
-              <Bookmark className="h-4 w-4 text-indigo-600" />
-            </div>
-            <div className="text-2xl font-bold">{totalBookmarks}</div>
-            <Progress value={Math.min(totalBookmarks * 10, 100)} className="h-1.5 mt-2" />
+          <div className="bg-indigo-50 rounded-lg p-4 text-center">
+            <Bookmark className="h-6 w-6 text-indigo-600 mx-auto mb-2" />
+            <p className="text-sm text-indigo-700">Bookmarks</p>
+            <p className="text-2xl font-bold text-indigo-800">{totalBookmarks}</p>
+          </div>
+          
+          <div className="bg-amber-50 rounded-lg p-4 text-center">
+            <Award className="h-6 w-6 text-amber-600 mx-auto mb-2" />
+            <p className="text-sm text-amber-700">Points Earned</p>
+            <p className="text-2xl font-bold text-amber-800">{earnedPoints}</p>
           </div>
         </div>
         
-        <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm mb-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
-            <div>
-              <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Reward Points</h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                You earn 1 point for each reader that views your article
-              </p>
-            </div>
-            <div className="mt-2 md:mt-0">
-              <Badge variant="secondary" className="text-lg px-3 py-1 bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
-                ₹{earnedPoints.toFixed(2)} Earned
-              </Badge>
-            </div>
-          </div>
-          
-          <Separator className="my-4" />
-          
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">
-                Uncollected Rewards: {uncollectedReads} {uncollectedReads === 1 ? 'read' : 'reads'}
-              </h4>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {uncollectedReads > 0 
-                  ? 'You have rewards waiting to be collected!'
-                  : 'No new rewards available at this time.'}
-              </p>
-              {collectError && (
-                <p className="text-sm text-red-600 dark:text-red-400 mt-1">{collectError}</p>
-              )}
-            </div>
-            
-            <Button 
-              onClick={handleCollectReward}
-              disabled={isCollecting || uncollectedReads <= 0}
-              className={cn(
-                "min-w-[150px]", 
-                uncollectedReads > 0 
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600" 
-                  : "bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed"
-              )}
-            >
-              {isCollecting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Collecting...
-                </>
-              ) : uncollectedReads > 0 ? (
-                <>
-                  <Award className="mr-2 h-4 w-4" />
+        {isOwner && (
+          <div className="mt-4">
+            {uncollectedReads > 0 ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+                <div className="flex items-center justify-center mb-3">
+                  <Gift className="h-6 w-6 text-green-600 mr-2" />
+                  <h3 className="text-lg font-semibold text-green-800">
+                    You have {uncollectedReads} reward points to collect!
+                  </h3>
+                </div>
+                <p className="text-green-700 mb-4">
+                  These points include both reader engagement and gifts from readers who enjoyed your article.
+                </p>
+                <Button 
+                  onClick={onCollectReward}
+                  className="bg-green-600 hover:bg-green-700 text-white px-6"
+                >
+                  <Award className="h-4 w-4 mr-2" />
                   Collect Rewards
-                </>
-              ) : (
-                <>
-                  <Check className="mr-2 h-4 w-4" />
-                  All Collected
-                </>
-              )}
-            </Button>
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center text-gray-600 italic">
+                You have collected all available rewards for this article. New rewards will appear as more readers engage with your content.
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -1,6 +1,7 @@
 // services/walletService.ts
 import api from './api';
 
+
 export interface WalletInfo {
   id: string;
   balance: number;
@@ -17,7 +18,7 @@ export interface WalletInfo {
 
 export interface Transaction {
   id: string;
-  user: number | string;
+  user: number | string;  
   transaction_type: 'deposit' | 'withdraw' | 'earn' | 'spend' | 'refund' | 'reward';
   article_title?: string;
   amount: number;
@@ -260,6 +261,17 @@ const walletService = {
     } catch (error: any) {
       console.error('QR code delete error:', error.message, error.response?.status, error.response?.data);
       throw new Error(error.response?.data?.detail || 'Failed to delete QR code');
+    }
+  },
+  giftPoints: async (data: GiftPointsRequest): Promise<any> => {
+    try {
+      const response = await api.post('/wallet/gift-points/', data, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to gift points:', error);
+      throw error;
     }
   },
 };

@@ -11,7 +11,8 @@ import {
   Wallet, 
   Bell, 
   Plus,
-  X 
+  X, 
+  BookOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
@@ -48,15 +49,22 @@ export default function WriterLayout() {
       path: "/writer/dashboard",
     },
     {
-      icon: FileText,
-      label: "My Articles",
-      path: "/writer/articles",
-    },
-    {
       icon: Wallet,
       label: "Wallet",
       path: "/writer/wallet",
     },
+    {
+      icon: FileText,
+      label: "My Articles",
+      path: "/writer/articles",
+    },
+    // {
+    //   icon: BookOpen,
+    //   label: "Articles",
+    //   path: "/articles",
+    // },
+    
+
     {
       icon: User,
       label: "Profile",
