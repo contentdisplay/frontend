@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import notificationService from '@/services/notificationService';
+import notificationService from '@/services/admin/notificationService';
 import { motion } from 'framer-motion';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
@@ -18,7 +18,7 @@ interface User {
 
 interface Notification {
   id: number;
-  user: User;
+  user: User | number; // It could be either the User object or just the user ID
   message: string;
   is_read: boolean;
   created_at: string;
@@ -26,6 +26,12 @@ interface Notification {
 
 export default function NotificationManagementPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [pagination, setPagination] = useState({
+    count: 0,
+    next: null as string | null,
+    previous: null as string | null,
+    currentPage: 1
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -36,17 +42,38 @@ export default function NotificationManagementPage() {
     fetchNotifications();
   }, []);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (url?: string) => {
     setIsLoading(true);
     try {
-      const data = await notificationService.getAllNotifications();
-      setNotifications(data);
+      const data = await notificationService.getAllNotifications(url);
+      
+      // Check if data has the expected pagination structure
+      if (data && typeof data === 'object' && Array.isArray(data.results)) {
+        setNotifications(data.results);
+        setPagination({
+          count: data.count || 0,
+          next: data.next,
+          previous: data.previous,
+          currentPage: url ? extractPageFromUrl(url) : 1
+        });
+      } else {
+        console.error('Expected paginated object but received:', data);
+        setNotifications([]);
+        toast.error('Received invalid notification data format');
+      }
     } catch (err) {
       toast.error('Failed to fetch notifications');
       console.error('Error fetching notifications:', err);
+      setNotifications([]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Helper function to extract page number from URL
+  const extractPageFromUrl = (url: string): number => {
+    const match = url.match(/page=(\d+)/);
+    return match ? parseInt(match[1], 10) : 1;
   };
 
   const handleCreateNotification = async () => {
@@ -193,7 +220,7 @@ export default function NotificationManagementPage() {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={fetchNotifications}
+                onClick={() => fetchNotifications()}
                 className="text-blue-600 hover:text-blue-800"
               >
                 Refresh
@@ -208,7 +235,7 @@ export default function NotificationManagementPage() {
                   <p className="mt-2 text-gray-500">Loading notifications...</p>
                 </div>
               </div>
-            ) : notifications.length === 0 ? (
+            ) : !notifications || notifications.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-500">No notifications found</p>
               </div>
@@ -225,51 +252,90 @@ export default function NotificationManagementPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {notifications.map((notification) => (
-                      <TableRow key={notification.id} className={notification.is_read ? "" : "bg-blue-50 dark:bg-blue-900/20"}>
-                        <TableCell>{notification.user.username}</TableCell>
-                        <TableCell className="max-w-xs truncate">{notification.message}</TableCell>
-                        <TableCell>
-                          <Badge variant={notification.is_read ? "outline" : "default"}>
-                            {notification.is_read ? 'Read' : 'Unread'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{new Date(notification.created_at).toLocaleString()}</TableCell>
-                        <TableCell className="flex flex-wrap gap-2">
-                          {!notification.is_read && (
+                    {notifications.map((notification) => {
+                      // Create a user display value that works whether user is an object or just an ID
+                      const userDisplay = typeof notification.user === 'object' && notification.user !== null
+                        ? notification.user.username
+                        : `User ${notification.user}`;
+
+                      return (
+                        <TableRow key={notification.id} className={notification.is_read ? "" : "bg-blue-50 dark:bg-blue-900/20"}>
+                          <TableCell>{userDisplay}</TableCell>
+                          <TableCell className="max-w-xs truncate">{notification.message}</TableCell>
+                          <TableCell>
+                            <Badge variant={notification.is_read ? "outline" : "default"}>
+                              {notification.is_read ? 'Read' : 'Unread'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{new Date(notification.created_at).toLocaleString()}</TableCell>
+                          <TableCell className="flex flex-wrap gap-2">
+                            {!notification.is_read && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleMarkAsRead(notification.id)}
+                                className="text-blue-600 hover:text-blue-800"
+                              >
+                                Mark as Read
+                              </Button>
+                            )}
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleMarkAsRead(notification.id)}
-                              className="text-blue-600 hover:text-blue-800"
+                              onClick={() => {
+                                setEditNotification(notification);
+                                setIsEditDialogOpen(true);
+                              }}
+                              className="text-green-600 hover:text-green-800"
                             >
-                              Mark as Read
+                              Edit
                             </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setEditNotification(notification);
-                              setIsEditDialogOpen(true);
-                            }}
-                            className="text-green-600 hover:text-green-800"
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleDeleteNotification(notification.id)}
-                            className="text-red-600 hover:text-red-800"
-                          >
-                            Delete
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteNotification(notification.id)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              Delete
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
+              </div>
+            )}
+            
+            {/* Pagination Controls */}
+            {pagination.count > 0 && (
+              <div className="flex justify-between items-center mt-4">
+                <div className="text-sm text-gray-500">
+                  Showing {notifications.length} of {pagination.count} notifications
+                </div>
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!pagination.previous}
+                    onClick={() => pagination.previous && fetchNotifications(pagination.previous)}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    Previous
+                  </Button>
+                  <span className="flex items-center px-2 text-sm">
+                    Page {pagination.currentPage}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!pagination.next}
+                    onClick={() => pagination.next && fetchNotifications(pagination.next)}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    Next
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -294,7 +360,9 @@ export default function NotificationManagementPage() {
                 />
               </div>
               <div className="text-sm text-gray-500">
-                <p>Sent to: {editNotification.user.username}</p>
+                <p>Sent to: {typeof editNotification.user === 'object' && editNotification.user !== null
+                    ? editNotification.user.username 
+                    : `User ${editNotification.user}`}</p>
                 <p>Status: {editNotification.is_read ? 'Read' : 'Unread'}</p>
                 <p>Created: {new Date(editNotification.created_at).toLocaleString()}</p>
               </div>

@@ -48,7 +48,7 @@ const notificationService = {
     await api.delete(`/notification/admin/notifications/${id}/delete/`);
   },
 
-  // For users or admins to mark notifications as read
+  // For users or admins to mark notifications as read  
   markAsRead: async (id: number): Promise<void> => {
     await api.post(`/notification/alert/${id}/read/`);
   },
