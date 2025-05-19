@@ -58,11 +58,11 @@ export default function WriterLayout() {
       label: "My Articles",
       path: "/writer/articles",
     },
-    // {
-    //   icon: BookOpen,
-    //   label: "Articles",
-    //   path: "/articles",
-    // },
+    {
+      icon: BookOpen,
+      label: "Articles",
+      path: "/writer/allarticles",
+    },
     
 
     {

@@ -160,6 +160,11 @@ const handleConvertPoints = async () => {
     return;
   }
 
+  if (walletInfo && walletInfo.reward_points < 2000) {
+    toast.error(`You need at least ₹2000 reward points to convert. Currently you have ₹${walletInfo.reward_points.toFixed(2)}.`);
+    return;
+  }
+
   if (walletInfo && conversionAmount > walletInfo.reward_points) {
     toast.error(`You only have ₹${walletInfo.reward_points.toFixed(2)} reward points available`);
     return;
@@ -177,7 +182,7 @@ const handleConvertPoints = async () => {
       };
     });
     
-    toast.success(`Successfully converted ₹${conversionAmount} to your wallet balance`);
+    toast.success(`Successfully converted ₹${conversionAmount} reward points to ₹${(conversionAmount/2).toFixed(2)} wallet balance`);
     setShowConvertDialog(false);
     // Reload transactions to show the new conversion transaction
     loadTransactions(timeFilter);
@@ -296,7 +301,7 @@ return (
               
               <div className="p-3 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-sm text-indigo-700 dark:text-indigo-300 flex items-center">
                 <Gift className="h-4 w-4 mr-2" />
-                Reward points can be converted to your main balance any time!
+                Collect at least 2000 reward points to convert to wallet balance at 50% rate!
               </div>
             </CardContent>
           </Card>
@@ -304,46 +309,48 @@ return (
       </div>
       
       <Card className="md:col-span-1 bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-950 dark:to-indigo-950 dark:border-blue-900/50">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-xl">Your Stats</CardTitle>
-          <CardDescription>Overview of your financial activity</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
-              <div className="rounded-full bg-green-100 p-2">
-                <ArrowUpRight className="h-5 w-5 text-green-600" />
-              </div>
-              <p className="text-xs text-muted-foreground">Income</p>
-              <p className="font-bold">₹{stats.income.toFixed(2)}</p>
-            </div>
-            
-            <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
-              <div className="rounded-full bg-amber-100 p-2">
-                <ArrowDownLeft className="h-5 w-5 text-amber-600" />
-              </div>
-              <p className="text-xs text-muted-foreground">Spending</p>
-              <p className="font-bold">₹{stats.spending.toFixed(2)}</p>
-            </div>
-            
-            <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
-              <div className="rounded-full bg-blue-100 p-2">
-                <Gift className="h-5 w-5 text-blue-600" />
-              </div>
-              <p className="text-xs text-muted-foreground">Rewards</p>
-              <p className="font-bold">₹{stats.rewards.toFixed(2)}</p>
-            </div>
-            
-            <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
-              <div className="rounded-full bg-indigo-100 p-2">
-                <Calendar className="h-5 w-5 text-indigo-600" />
-              </div>
-              <p className="text-xs text-muted-foreground">Articles</p>
-              <p className="font-bold">{stats.articles}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+  <CardHeader className="pb-2">
+    <CardTitle className="text-xl">Your Stats</CardTitle>
+    <CardDescription>Overview of your financial activity</CardDescription>
+  </CardHeader>
+  <CardContent>
+    <div className="grid grid-cols-2 gap-4">
+      <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
+        <div className="rounded-full bg-green-100 p-2">
+          <ArrowUpRight className="h-5 w-5 text-green-600" />
+        </div>
+        <p className="text-xs text-muted-foreground">Income</p>
+        <p className="font-bold">₹{stats.income.toFixed(2)}</p>
+      </div>
+      
+      <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
+        <div className="rounded-full bg-amber-100 p-2">
+          <ArrowDownLeft className="h-5 w-5 text-amber-600" />
+        </div>
+        <p className="text-xs text-muted-foreground">Spending</p>
+        <p className="font-bold">₹{stats.spending.toFixed(2)}</p>
+      </div>
+      
+      <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
+        <div className="rounded-full bg-blue-100 p-2">
+          <Gift className="h-5 w-5 text-blue-600" />
+        </div>
+        <p className="text-xs text-muted-foreground">Reward Points</p>
+        <p className="font-bold text-amber-600 dark:text-amber-400">
+          ₹{walletInfo?.reward_points.toFixed(2) || '0.00'}
+        </p>
+      </div>
+      
+      <div className="flex flex-col items-center justify-center space-y-1 bg-white/50 dark:bg-white/5 rounded-lg p-3">
+        <div className="rounded-full bg-indigo-100 p-2">
+          <Calendar className="h-5 w-5 text-indigo-600" />
+        </div>
+        <p className="text-xs text-muted-foreground">Articles</p>
+        <p className="font-bold">{stats.articles}</p>
+      </div>
+    </div>
+  </CardContent>
+</Card>
     </div>
     
     <div className="space-y-4">
@@ -567,15 +574,25 @@ return (
     </Dialog>
 
     {/* Convert Reward Points Dialog */}
-    <Dialog open={showConvertDialog} onOpenChange={setShowConvertDialog}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Convert Reward Points</DialogTitle>
-          <DialogDescription>
-            Convert your earned reward points to your main wallet balance
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
+<Dialog open={showConvertDialog} onOpenChange={setShowConvertDialog}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Convert Reward Points</DialogTitle>
+      <DialogDescription>
+        Convert your earned reward points to your main wallet balance
+      </DialogDescription>
+    </DialogHeader>
+    <div className="space-y-4">
+      {walletInfo && walletInfo.reward_points < 2000 ? (
+        <Alert variant="warning" className="bg-yellow-50 dark:bg-yellow-950 border-yellow-200 dark:border-yellow-800">
+          <AlertTitle className="text-yellow-700 dark:text-yellow-400">Minimum Required</AlertTitle>
+          <AlertDescription className="text-yellow-600 dark:text-yellow-400">
+            You need at least ₹2000 reward points to convert. Currently you have ₹{walletInfo.reward_points.toFixed(2)}.
+            Continue reading articles to earn more reward points!
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <>
           <div>
             <Label htmlFor="conversion-amount">Amount to Convert</Label>
             <Input
@@ -595,36 +612,43 @@ return (
           <div className="p-4 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
             <p className="text-sm text-indigo-700 dark:text-indigo-300 mb-2">Conversion Preview</p>
             <div className="flex items-center mb-2">
-              <p className="flex-1">Reward Points:</p>
+              <p className="flex-1">Reward Points to Convert:</p>
               <p className="font-medium text-amber-600">₹{conversionAmount.toFixed(2)}</p>
+            </div>
+            <Separator className="my-2" />
+            <div className="flex items-center mb-2">
+              <p className="flex-1">Conversion Rate:</p>
+              <p className="font-medium">50%</p>
             </div>
             <Separator className="my-2" />
             <div className="flex items-center">
               <p className="flex-1">Will be added to balance:</p>
-              <p className="font-medium text-green-600">₹{conversionAmount.toFixed(2)}</p>
+              <p className="font-medium text-green-600">₹{(conversionAmount / 2).toFixed(2)}</p>
             </div>
           </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setShowConvertDialog(false)}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={handleConvertPoints} 
-            disabled={conversionAmount <= 0 || (walletInfo && conversionAmount > walletInfo.reward_points) || isConverting}
-          >
-            {isConverting ? (
-              <>
-                <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
-                Converting...
-              </>
-            ) : (
-              "Convert Points"
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      )}
+    </div>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setShowConvertDialog(false)}>
+        Cancel
+      </Button>
+      <Button 
+        onClick={handleConvertPoints} 
+        disabled={conversionAmount <= 0 || (walletInfo && (conversionAmount > walletInfo.reward_points || walletInfo.reward_points < 2000)) || isConverting}
+      >
+        {isConverting ? (
+          <>
+            <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-t-transparent" />
+            Converting...
+          </>
+        ) : (
+          "Convert Points"
+        )}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
   </div>
 );
 }

@@ -104,7 +104,7 @@ const App = () => (
                 }
               >
                 <Route path="dashboard" element={<WriterDashboard />} />
-                {/* Use the updated ArticleCreatePage component */}
+                <Route path="allarticles" element={<ArticlesPage />} />
                 <Route path="articles/create" element={<ArticleCreatePage />} />
                 <Route path="/writer/articles/:slug" element={<WriterArticleDetailPage />} />
                 <Route path="articles/edit/:slug" element={<ArticleEditPage />} />
