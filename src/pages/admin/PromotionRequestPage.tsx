@@ -4,12 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Check, X, Eye, AlertTriangle, RefreshCw, Wallet, Clock, Info, User, UserPlus } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { 
+  Check, X, Eye, AlertTriangle, RefreshCw, Wallet, Clock, 
+  Info, User, UserPlus, Shield, Users, DollarSign
+} from 'lucide-react';
 import { toast } from 'sonner';
 import adminPromotionService from '@/services/admin/promotionService';
 import { motion } from 'framer-motion';
@@ -40,11 +44,21 @@ interface UserProfile {
 }
 
 interface UserWallet {
-  id: number;
-  user_id: number;
+  id: string;
   balance: number;
   reward_points?: number;
-  last_transaction_date: string | null;
+  total_earning?: number;
+  total_spending?: number;
+  status?: string;
+}
+
+interface UserData {
+  id: number;
+  username: string;
+  email: string;
+  groups: string[];
+  is_staff: boolean;
+  is_superuser: boolean;
 }
 
 export default function AdminPromotionRequestsPage() {
@@ -52,30 +66,33 @@ export default function AdminPromotionRequestsPage() {
   const [selectedPromotion, setSelectedPromotion] = useState<PromotionRequest | null>(null);
   const [selectedUserProfile, setSelectedUserProfile] = useState<UserProfile | null>(null);
   const [selectedUserWallet, setSelectedUserWallet] = useState<UserWallet | null>(null);
+  const [selectedUserData, setSelectedUserData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<'approved' | 'rejected'>('approved');
   const [processingAction, setProcessingAction] = useState(false);
-  const [availableRoles, setAvailableRoles] = useState<string[]>(['normal', 'writer', 'admin']);
-  const [roleDialogOpen, setRoleDialogOpen] = useState(false);
-  const [selectedRole, setSelectedRole] = useState<string>('');
-  const [updatingRole, setUpdatingRole] = useState(false);
+  const [availableGroups, setAvailableGroups] = useState<string[]>(['Normal User', 'Content Writer', 'Admin']);
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<string>('');
+  const [updatingGroup, setUpdatingGroup] = useState(false);
+  const [deductBalance, setDeductBalance] = useState(true);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     fetchPromotions();
-    fetchAvailableRoles();
-  }, []);
+    fetchAvailableGroups();
+  }, [refreshTrigger]);
 
-  const fetchAvailableRoles = async () => {
+  const fetchAvailableGroups = async () => {
     try {
-      const roles = await adminPromotionService.getAvailableRoles();
-      if (roles && roles.length > 0) {
-        setAvailableRoles(roles);
+      const groups = await adminPromotionService.getAvailableGroups();
+      if (groups && groups.length > 0) {
+        setAvailableGroups(groups);
       }
     } catch (err) {
-      console.error('Failed to fetch available roles:', err);
-      // Fall back to default roles
+      console.error('Failed to fetch available groups:', err);
+      // Fall back to default groups
     }
   };
 
@@ -96,14 +113,28 @@ export default function AdminPromotionRequestsPage() {
     setUserDialogOpen(true);
     
     try {
-      const [userProfile, userWallet] = await Promise.all([
+      const [userProfile, userWallet, userData] = await Promise.all([
         adminPromotionService.getUserProfile(promotion.user?.id || 0),
-        adminPromotionService.getUserWallet(promotion.user?.id || 0)
+        adminPromotionService.getUserWallet(promotion.user?.id || 0),
+        adminPromotionService.getUserData(promotion.user?.id || 0)
       ]);
       
       setSelectedUserProfile(userProfile);
       setSelectedUserWallet(userWallet);
-      setSelectedRole(userProfile.role);
+      setSelectedUserData(userData);
+      
+      // Set the initial selected group based on user's current groups
+      if (userData.groups && userData.groups.length > 0) {
+        if (userData.groups.includes('admin')) {
+          setSelectedGroup('admin');
+        } else if (userData.groups.includes('Content Writer')) {
+          setSelectedGroup('Content Writer');
+        } else {
+          setSelectedGroup('Normal User');
+        }
+      } else {
+        setSelectedGroup('Normal User');
+      }
     } catch (err) {
       toast.error('Failed to fetch user details');
     }
@@ -121,14 +152,17 @@ export default function AdminPromotionRequestsPage() {
     setProcessingAction(true);
     try {
       if (actionType === 'approved') {
-        await adminPromotionService.approvePromotion(selectedPromotion.id);
-        toast.success('Promotion request approved');
+        const response = await adminPromotionService.approvePromotion(selectedPromotion.id);
+        toast.success(
+          `Promotion request approved. ${response.balance_deducted || 50} credits deducted.` + 
+          (response.new_balance ? ` New balance: ${response.new_balance}` : '')
+        );
       } else {
         await adminPromotionService.rejectPromotion(selectedPromotion.id, 'Request rejected by admin');
         toast.success('Promotion request rejected');
       }
-      fetchPromotions();
       setConfirmDialogOpen(false);
+      setRefreshTrigger(prev => prev + 1); // Trigger refresh
     } catch (err: any) {
       toast.error(err.message || `Failed to ${actionType} promotion request`);
     } finally {
@@ -136,27 +170,70 @@ export default function AdminPromotionRequestsPage() {
     }
   };
 
-  const handleRoleUpdate = async () => {
-    if (!selectedPromotion?.user || !selectedRole) return;
+  const handleGroupUpdate = async () => {
+    if (!selectedPromotion?.user || !selectedGroup) return;
     
-    setUpdatingRole(true);
+    setUpdatingGroup(true);
     try {
-      await adminPromotionService.updateUserRole(selectedPromotion.user.id, selectedRole);
-      toast.success(`User role updated to ${selectedRole}`);
+      const response = await adminPromotionService.updateUserGroup(
+        selectedPromotion.user.id, 
+        selectedGroup,
+        deductBalance
+      );
       
-      // Update local state
-      if (selectedUserProfile) {
-        setSelectedUserProfile({
-          ...selectedUserProfile,
-          role: selectedRole
+      // Show appropriate toast based on deduction
+      if (response.balance_deducted > 0) {
+        toast.success(`User added to "${selectedGroup}" group. ${response.balance_deducted} credits deducted.`);
+      } else {
+        toast.success(`User added to "${selectedGroup}" group.`);
+      }
+      
+      // Update local userData state to reflect group changes
+      if (selectedUserData) {
+        let newGroups: string[] = [];
+        
+        // Handle special cases for different groups
+        if (selectedGroup === 'admin') {
+          newGroups = ['admin'];
+        } else if (selectedGroup === 'Content Writer') {
+          newGroups = ['Content Writer'];
+        } else {
+          newGroups = ['Normal User'];
+        }
+        
+        setSelectedUserData({
+          ...selectedUserData,
+          groups: newGroups,
+          is_staff: selectedGroup === 'admin',
+          is_superuser: selectedGroup === 'admin'
         });
       }
       
-      setRoleDialogOpen(false);
+      // Update profile role if needed
+      if (selectedUserProfile) {
+        let newRole = 'normal';
+        if (selectedGroup === 'admin') newRole = 'admin';
+        else if (selectedGroup === 'Content Writer') newRole = 'writer';
+        
+        setSelectedUserProfile({
+          ...selectedUserProfile,
+          role: newRole
+        });
+      }
+      
+      // Update wallet if balance was deducted
+      if (response.balance_deducted > 0 && selectedUserWallet && response.new_balance !== null) {
+        setSelectedUserWallet({
+          ...selectedUserWallet,
+          balance: response.new_balance
+        });
+      }
+      
+      setGroupDialogOpen(false);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to update user role');
+      toast.error(err.message || 'Failed to update user group');
     } finally {
-      setUpdatingRole(false);
+      setUpdatingGroup(false);
     }
   };
   
@@ -190,11 +267,11 @@ export default function AdminPromotionRequestsPage() {
     );
   };
 
-  const getRoleBadgeClass = (role: string) => {
-    switch(role) {
+  const getGroupBadgeClass = (group: string) => {
+    switch(group) {
       case 'admin':
         return 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300';
-      case 'writer':
+      case 'Content Writer':
         return 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300';
       default:
         return 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300';
@@ -208,7 +285,7 @@ export default function AdminPromotionRequestsPage() {
           Promotion Requests
         </h1>
         <Button 
-          onClick={fetchPromotions}
+          onClick={() => setRefreshTrigger(prev => prev + 1)}
           variant="outline"
           size="sm"
           className="flex items-center gap-1"
@@ -320,7 +397,7 @@ export default function AdminPromotionRequestsPage() {
                 <TabsTrigger value="profile">Profile</TabsTrigger>
                 <TabsTrigger value="wallet">Wallet</TabsTrigger>
                 <TabsTrigger value="request">Request</TabsTrigger>
-                <TabsTrigger value="role">Role Management</TabsTrigger>
+                <TabsTrigger value="groups">Group Management</TabsTrigger>
               </TabsList>
               
               <TabsContent value="profile" className="mt-4">
@@ -338,10 +415,12 @@ export default function AdminPromotionRequestsPage() {
                       </Avatar>
                       <div>
                         <h3 className="text-lg font-semibold">{selectedUserProfile.first_name} {selectedUserProfile.last_name}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge className={`capitalize ${getRoleBadgeClass(selectedUserProfile.role)}`}>
-                            {selectedUserProfile.role}
-                          </Badge>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {selectedUserData?.groups.map(group => (
+                            <Badge key={group} className={`capitalize ${getGroupBadgeClass(group)}`}>
+                              {group}
+                            </Badge>
+                          ))}
                           {isProfileComplete(selectedUserProfile) ? (
                             <Badge className="bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300">
                               Profile Complete
@@ -423,12 +502,21 @@ export default function AdminPromotionRequestsPage() {
                       </div>
                     )}
 
-                    {selectedUserWallet.last_transaction_date && (
-                      <div>
-                        <p className="text-sm text-muted-foreground">Last Transaction</p>
-                        <p className="font-medium">{formatDate(selectedUserWallet.last_transaction_date)}</p>
-                      </div>
-                    )}
+                    <div className="grid grid-cols-2 gap-4">
+                      {selectedUserWallet.total_earning !== undefined && (
+                        <div className="bg-indigo-50 dark:bg-indigo-950/20 rounded-lg p-4">
+                          <p className="text-sm text-muted-foreground">Total Earnings</p>
+                          <p className="text-xl font-bold">{selectedUserWallet.total_earning} credits</p>
+                        </div>
+                      )}
+                      
+                      {selectedUserWallet.total_spending !== undefined && (
+                        <div className="bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4">
+                          <p className="text-sm text-muted-foreground">Total Spending</p>
+                          <p className="text-xl font-bold">{selectedUserWallet.total_spending} credits</p>
+                        </div>
+                      )}
+                    </div>
 
                     {selectedUserWallet.balance < 50 && (
                       <Alert className="mt-4 bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800/40">
@@ -484,53 +572,65 @@ export default function AdminPromotionRequestsPage() {
                       </li>
                       <li className="flex items-start gap-2">
                         <div className="mt-0.5">5.</div>
-                        <div>User's role will be updated to "writer"</div>
+                        <div>User will receive notification of promotion approval</div>
                       </li>
                     </ul>
                   </div>
                 </div>
               </TabsContent>
 
-              <TabsContent value="role" className="mt-4">
+              <TabsContent value="groups" className="mt-4">
                 <div className="space-y-4">
                   <div className="bg-indigo-50 dark:bg-indigo-950/20 rounded-lg p-5">
                     <h4 className="font-medium mb-3 flex items-center gap-2 text-indigo-700 dark:text-indigo-300">
-                      <UserPlus className="h-5 w-5" />
-                      Manage User Roles
+                      <Users className="h-5 w-5" />
+                      Manage User Groups
                     </h4>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Assign or change the user's role. This will update their permissions and group memberships.
+                      Assign the user to a specific group. This will update their permissions and access levels.
                     </p>
 
                     <div className="space-y-4">
                       <div>
-                        <p className="text-sm text-muted-foreground mb-1">Current Role</p>
-                        <Badge className={`capitalize ${getRoleBadgeClass(selectedUserProfile?.role || 'normal')}`}>
-                          {selectedUserProfile?.role || 'normal'} 
-                        </Badge>
+                        <p className="text-sm text-muted-foreground mb-1">Current Groups</p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedUserData?.groups && selectedUserData.groups.length > 0 ? (
+                            selectedUserData.groups.map(group => (
+                              <Badge key={group} className={`capitalize ${getGroupBadgeClass(group)}`}>
+                                {group}
+                              </Badge>
+                            ))
+                          ) : (
+                            <Badge>No Groups</Badge>
+                          )}
+                        </div>
                       </div>
 
                       <div>
-                        <p className="text-sm text-muted-foreground mb-1">Change Role</p>
+                        <p className="text-sm text-muted-foreground mb-1">Change Group</p>
                         <div className="flex gap-2">
                           <Select 
-                            value={selectedRole} 
-                            onValueChange={setSelectedRole}
+                            value={selectedGroup} 
+                            onValueChange={setSelectedGroup}
                           >
                             <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select role" />
+                              <SelectValue placeholder="Select group" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="normal">Normal User</SelectItem>
-                              <SelectItem value="writer">Content Writer</SelectItem>
+                              <SelectItem value="Normal User">Normal User</SelectItem>
+                              <SelectItem value="Content Writer">Content Writer</SelectItem>
                               <SelectItem value="admin">Admin</SelectItem>
                             </SelectContent>
                           </Select>
                           <Button 
-                            onClick={handleRoleUpdate}
-                            disabled={!selectedRole || selectedRole === selectedUserProfile?.role || updatingRole}
+                            onClick={handleGroupUpdate}
+                            disabled={
+                              !selectedGroup || 
+                              (selectedUserData?.groups.includes(selectedGroup)) || 
+                              updatingGroup
+                            }
                           >
-                            {updatingRole ? (
+                            {updatingGroup ? (
                               <div className="animate-spin h-4 w-4 border-2 border-t-transparent rounded-full"></div>
                             ) : (
                               'Update'
@@ -538,15 +638,50 @@ export default function AdminPromotionRequestsPage() {
                           </Button>
                         </div>
                       </div>
+
+                      {selectedGroup === 'Content Writer' && !selectedUserData?.groups.includes('Content Writer') && (
+                        <div className="flex items-center space-x-2 mt-3">
+                          <Switch
+                            id="deduct-balance"
+                            checked={deductBalance}
+                            onCheckedChange={setDeductBalance}
+                          />
+                          <label
+                            htmlFor="deduct-balance"
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          >
+                            Deduct 50 credits when adding to Content Writer group
+                          </label>
+                        </div>
+                      )}
+
+                      {selectedGroup === 'Content Writer' && deductBalance && !selectedUserData?.groups.includes('Content Writer') && (
+                        <Alert className="mt-3 bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800/40">
+                          <DollarSign className="h-4 w-4 text-amber-600" />
+                          <AlertDescription className="text-amber-700 dark:text-amber-300">
+                            This action will deduct 50 credits from the user's wallet.
+                            {selectedUserWallet && (
+                              <div className="mt-1">
+                                Current balance: <b>{selectedUserWallet.balance}</b> credits
+                                <br />
+                                Balance after deduction: <b>{Math.max(0, selectedUserWallet.balance - 50)}</b> credits
+                              </div>
+                            )}
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </div>
 
                     <Separator className="my-4" />
 
                     <div className="space-y-3">
-                      <h5 className="font-medium text-sm">Role Permissions</h5>
+                      <h5 className="font-medium text-sm">Group Permissions</h5>
                       <div className="grid grid-cols-3 gap-3">
                         <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm">
-                          <h6 className="font-medium text-sm mb-2">Normal User</h6>
+                          <h6 className="font-medium text-sm mb-2 flex items-center gap-1">
+                            <User className="h-3.5 w-3.5 text-blue-600" />
+                            Normal User
+                          </h6>
                           <ul className="text-xs text-muted-foreground space-y-1">
                             <li>• View content</li>
                             <li>• Update profile</li>
@@ -554,7 +689,10 @@ export default function AdminPromotionRequestsPage() {
                           </ul>
                         </div>
                         <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm border-2 border-green-100 dark:border-green-900/30">
-                          <h6 className="font-medium text-sm mb-2 text-green-700 dark:text-green-400">Content Writer</h6>
+                          <h6 className="font-medium text-sm mb-2 flex items-center gap-1 text-green-700 dark:text-green-400">
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Content Writer
+                          </h6>
                           <ul className="text-xs text-muted-foreground space-y-1">
                             <li>• Create articles</li>
                             <li>• Edit own articles</li>
@@ -562,7 +700,10 @@ export default function AdminPromotionRequestsPage() {
                           </ul>
                         </div>
                         <div className="bg-white dark:bg-gray-800 p-3 rounded-md shadow-sm">
-                          <h6 className="font-medium text-sm mb-2 text-purple-700 dark:text-purple-400">Admin</h6>
+                          <h6 className="font-medium text-sm mb-2 flex items-center gap-1 text-purple-700 dark:text-purple-400">
+                            <Shield className="h-3.5 w-3.5" />
+                            Admin
+                          </h6>
                           <ul className="text-xs text-muted-foreground space-y-1">
                             <li>• Full system access</li>
                             <li>• Manage all users</li>
@@ -629,7 +770,7 @@ export default function AdminPromotionRequestsPage() {
             </DialogTitle>
             <DialogDescription>
               {actionType === 'approved' 
-                ? 'Are you sure you want to approve this promotion request? This will deduct 50 credits from the user\'s wallet.'
+                ? 'Are you sure you want to approve this promotion request? This will deduct 50 credits from the user\'s wallet and add them to the "Content Writer" group.'
                 : 'Are you sure you want to reject this promotion request?'
               }
             </DialogDescription>
@@ -650,12 +791,23 @@ export default function AdminPromotionRequestsPage() {
               </div>
               
               {actionType === 'approved' && selectedUserWallet && (
-                <div className="mt-4 flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-5 w-5 text-blue-600" />
-                    <span className="font-medium">Current Balance:</span>
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-5 w-5 text-blue-600" />
+                      <span className="font-medium">Current Balance:</span>
+                    </div>
+                    <span className="font-bold">{selectedUserWallet.balance} credits</span>
                   </div>
-                  <span className="font-bold">{selectedUserWallet.balance} credits</span>
+                  
+                  {selectedUserWallet.balance < 50 && (
+                    <Alert variant="destructive">
+                      <AlertTitle>Insufficient Balance</AlertTitle>
+                      <AlertDescription>
+                        The user doesn't have the required 50 credits to be promoted to Content Writer.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               )}
             </div>
