@@ -160,36 +160,25 @@ const articleService = {
 
   getBookmarkedArticles: async (): Promise<{article: number}[]> => {
     try {
-      // Get the user's bookmarked articles
-      // This endpoint should return something like {data: [{article: 1}, {article: 2}]}
-      // or might return full article objects depending on your API
       const response = await api.get('/user/bookmarks/');
+      console.log('Bookmarked articles response:', response.data);
       
-      // If the API returns full article objects, map them to just the IDs
       if (response.data && Array.isArray(response.data)) {
-        if (response.data.length > 0 && typeof response.data[0].article === 'number') {
-          return response.data;
-        } else {
-          // If the API returns full article objects
-          return response.data.map((article: any) => ({ article: article.id }));
+        // Handle different possible response formats
+        if (response.data.length > 0) {
+          if (typeof response.data[0].article === 'number') {
+            return response.data;
+          } else if (response.data[0].article && typeof response.data[0].article.id === 'number') {
+            return response.data.map(item => ({ article: item.article.id }));
+          } else if (typeof response.data[0].id === 'number') {
+            return response.data.map(item => ({ article: item.id }));
+          }
         }
+        return response.data;
       }
       return [];
     } catch (error) {
       console.error('Failed to fetch bookmarked articles:', error);
-      // Handle the 404 case by providing a fallback
-      if ((error as any)?.response?.status === 404) {
-        console.log('Bookmarks endpoint not found, using local alternative');
-        // If the API endpoint is not available, look up the articles with is_bookmarked=true
-        const articlesResponse = await api.get('/articles/');
-        const articles = Array.isArray(articlesResponse.data) 
-          ? articlesResponse.data 
-          : (articlesResponse.data?.results || []);
-          
-        return articles
-          .filter((article: Article) => article.is_bookmarked)
-          .map((article: Article) => ({ article: article.id }));
-      }
       return [];
     }
   },

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import articleService, { Article } from '@/services/articleService';
+import adminArticleService, { Article } from '@/services/admin/adminArticleService';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { 
@@ -60,7 +60,7 @@ export default function ArticleApprovalPage() {
     const fetchPendingArticles = async () => {
       try {
         setIsLoading(true);
-        const data = await articleService.getPendingArticles();
+        const data = await adminArticleService.getPendingArticles();
         setPendingArticles(data);
       } catch (error) {
         console.error('Failed to fetch pending articles:', error);
@@ -77,7 +77,7 @@ export default function ArticleApprovalPage() {
     try {
       setActiveArticle(article);
       setIsApproving(true);
-      await articleService.approveArticle(article.slug);
+      await adminArticleService.approveArticle(article.id);
       setPendingArticles(pendingArticles.filter(a => a.id !== article.id));
       toast.success(`Article "${article.title}" approved and published`);
     } catch (error) {
@@ -98,7 +98,7 @@ export default function ArticleApprovalPage() {
     try {
       setActiveArticle(article);
       setIsRejecting(true);
-      await articleService.rejectArticle(article.slug, rejectionReason);
+      await adminArticleService.rejectArticle(article.id, rejectionReason);
       setPendingArticles(pendingArticles.filter(a => a.id !== article.id));
       toast.success(`Article "${article.title}" rejected`);
       setRejectionReason('');
@@ -173,7 +173,7 @@ export default function ArticleApprovalPage() {
                 <CardContent>
                   <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-2">
                     <User className="mr-1 h-4 w-4" />
-                    <span className="mr-4">{article.author}</span>
+                    <span className="mr-4">{typeof article.author === 'string' ? article.author : article.author_name}</span>
                     <FileText className="mr-1 h-4 w-4" />
                     <span>{article.word_count} words</span>
                   </div>
@@ -182,12 +182,12 @@ export default function ArticleApprovalPage() {
                   </p>
                   <div className="flex flex-wrap gap-1 mt-2">
                     <Tags className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-1" />
-                    {article.tags.slice(0, 3).map((tag, index) => (
+                    {article.tags && article.tags.slice(0, 3).map((tag, index) => (
                       <Badge key={index} variant="outline" className="bg-gray-100 dark:bg-gray-800">
                         {tag}
                       </Badge>
                     ))}
-                    {article.tags.length > 3 && (
+                    {article.tags && article.tags.length > 3 && (
                       <Badge variant="outline" className="bg-gray-100 dark:bg-gray-800">
                         +{article.tags.length - 3}
                       </Badge>
@@ -208,7 +208,7 @@ export default function ArticleApprovalPage() {
                         <DialogDescription>
                           <div className="flex items-center text-sm text-gray-600 dark:text-gray-400 mt-2">
                             <User className="mr-1 h-4 w-4" />
-                            <span className="mr-4">{article.author}</span>
+                            <span className="mr-4">{typeof article.author === 'string' ? article.author : article.author_name}</span>
                             <Clock className="mr-1 h-4 w-4" />
                             <span>{formatDate(article.created_at)}</span>
                           </div>

@@ -1,23 +1,42 @@
+// services/admin/adminArticleService.ts
 import api from '../api';
 
-interface Article {
+export interface Article {
   id: number;
   title: string;
   slug: string;
   content: string;
-  author: number;
-  author_name: string;
+  description?: string;
+  author: string | number;
+  author_name?: string;
   status: 'draft' | 'pending' | 'published' | 'rejected';
   created_at: string;
   updated_at: string;
-  published_at: string | null;
+  published_at?: string | null;
   thumbnail?: string | null;
   total_reads: number;
   total_likes: number;
-  likes_count: number;
-  bookmarks_count: number;
+  total_bookmarks: number;
+  likes_count?: number;
+  bookmarks_count?: number;
   word_count: number;
-  tags?: string[];
+  tags: string[];
+  is_liked?: boolean;
+  is_bookmarked?: boolean;
+}
+
+export interface ArticleStats {
+  status_counts: Array<{status: string, count: number}>;
+  articles_by_day: Array<{day: string, count: number}>;
+  most_read_articles: Article[];
+  most_liked_articles: Article[];
+  top_writers: Array<{
+    id: number;
+    username: string;
+    article_count: number;
+    total_reads: number;
+    total_likes: number;
+  }>;
 }
 
 interface AdminArticleResponse {
@@ -94,7 +113,7 @@ const adminArticleService = {
   },
   
   // Approve an article for publishing
-  approveArticle: async (id: number): Promise<void> => {
+  approveArticle: async (id: number | string): Promise<void> => {
     try {
       await api.post(`/admin/articles/${id}/approve/`);
     } catch (error) {
@@ -104,13 +123,11 @@ const adminArticleService = {
   },
   
   // Reject an article
-  rejectArticle: async (id: number, feedback?: string): Promise<Article> => {
+  rejectArticle: async (id: number | string, rejectionReason: string): Promise<void> => {
     try {
-      const response = await api.patch(`/admin/articles/${id}/update/`, { 
-        status: 'rejected',
-        admin_feedback: feedback
+      await api.post(`/admin/articles/${id}/reject/`, { 
+        feedback: rejectionReason 
       });
-      return response.data;
     } catch (error) {
       console.error(`Error rejecting article ${id}:`, error);
       throw error;
@@ -138,7 +155,7 @@ const adminArticleService = {
   },
   
   // Get article statistics
-  getArticleStats: async (): Promise<any> => {
+  getArticleStats: async (): Promise<ArticleStats> => {
     try {
       const response = await api.get('/admin/articles/stats/');
       return response.data;

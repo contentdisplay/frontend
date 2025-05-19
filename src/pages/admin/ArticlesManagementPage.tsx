@@ -1,39 +1,23 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+// pages/admin/AdminArticleManagementPage.tsx
+import React, { useEffect, useState, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { AlertCircle, CheckCircle, Edit, Eye, Loader2, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
-import adminArticleService from '@/services/admin/adminArticleService';
+import adminArticleService, { Article, ArticleStats } from '@/services/admin/adminArticleService';
 import { motion } from 'framer-motion';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-interface Article {
-  id: number;
-  title: string;
-  slug: string;
-  content: string;
-  author: number;
-  author_name: string;
-  status: 'draft' | 'pending' | 'published' | 'rejected';
-  created_at: string;
-  updated_at: string;
-  published_at: string | null;
-  thumbnail?: string | null;
-  total_reads: number;
-  total_likes: number;
-  likes_count: number;
-  bookmarks_count: number;
-  word_count: number;
-  tags?: string[];
-}
+// Don't import SelectContent, SelectItem, SelectTrigger, SelectValue directly
+// Instead create a simple custom dropdown to avoid Radix UI focus issues
+import { Select } from '@/components/ui/select';
 
 interface ArticleFormData {
   title: string;
@@ -42,13 +26,60 @@ interface ArticleFormData {
   admin_feedback?: string;
 }
 
+// Create a simple custom dropdown component to avoid Radix UI recursion
+const StatusDropdown = ({ 
+  value, 
+  onChange 
+}: { 
+  value: string, 
+  onChange: (value: string) => void 
+}) => {
+  return (
+    <select 
+      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="draft">Draft</option>
+      <option value="pending">Pending Review</option>
+      <option value="published">Published</option>
+      <option value="rejected">Rejected</option>
+    </select>
+  );
+};
+
+// Create a simple custom filter dropdown
+const FilterDropdown = ({ 
+  value, 
+  onChange 
+}: { 
+  value: string, 
+  onChange: (value: string) => void 
+}) => {
+  return (
+    <select 
+      className="flex h-10 w-full sm:w-40 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="all">All Status</option>
+      <option value="draft">Draft</option>
+      <option value="pending">Pending</option>
+      <option value="published">Published</option>
+      <option value="rejected">Rejected</option>
+    </select>
+  );
+};
+
 export default function AdminArticleManagementPage() {
+  const navigate = useNavigate();
   const [articles, setArticles] = useState<Article[]>([]);
   const [filteredArticles, setFilteredArticles] = useState<Article[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState<ArticleStats | null>(null);
+  const [countStats, setCountStats] = useState({
     total: 0,
     published: 0,
     pending: 0,
@@ -84,19 +115,36 @@ export default function AdminArticleManagementPage() {
     filterArticles();
   }, [articles, searchTerm, filterStatus]);
   
+  // Set count stats when stats change
+  useEffect(() => {
+    if (stats) {
+      // Calculate total articles from all status counts
+      const total = stats.status_counts.reduce((sum, item) => sum + item.count, 0);
+      
+      // Extract specific status counts
+      const published = stats.status_counts.find(item => item.status === 'published')?.count || 0;
+      const pending = stats.status_counts.find(item => item.status === 'pending')?.count || 0;
+      const draft = stats.status_counts.find(item => item.status === 'draft')?.count || 0;
+      const rejected = stats.status_counts.find(item => item.status === 'rejected')?.count || 0;
+      
+      setCountStats({
+        total,
+        published,
+        pending,
+        draft,
+        rejected
+      });
+    }
+  }, [stats]);
+  
   // Fetch article stats
   const fetchStats = async () => {
     try {
       const statsData = await adminArticleService.getArticleStats();
-      setStats({
-        total: articles.length,
-        published: statsData.published_count || 0,
-        pending: statsData.pending_count || 0,
-        draft: statsData.draft_count || 0,
-        rejected: statsData.rejected_count || 0
-      });
+      setStats(statsData);
     } catch (err) {
       console.error('Error fetching article stats:', err);
+      toast.error('Failed to fetch article statistics');
     }
   };
 
@@ -121,7 +169,7 @@ export default function AdminArticleManagementPage() {
   };
 
   // Filter articles locally based on search term and status
-  const filterArticles = () => {
+  const filterArticles = useCallback(() => {
     if (!Array.isArray(articles)) {
       setFilteredArticles([]);
       return;
@@ -133,7 +181,8 @@ export default function AdminArticleManagementPage() {
     if (searchTerm) {
       filtered = filtered.filter(article => 
         article?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        article?.author_name?.toLowerCase().includes(searchTerm.toLowerCase())
+        (typeof article?.author === 'string' && article?.author?.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (article?.author_name && article?.author_name?.toLowerCase().includes(searchTerm.toLowerCase()))
       );
     }
     
@@ -143,7 +192,7 @@ export default function AdminArticleManagementPage() {
     }
     
     setFilteredArticles(filtered);
-  };
+  }, [articles, searchTerm, filterStatus, isLoading]);
 
   // Handle updating article status
   const handleUpdateStatus = async (id: number, status: 'draft' | 'pending' | 'published' | 'rejected') => {
@@ -247,8 +296,12 @@ export default function AdminArticleManagementPage() {
 
   // Handle opening delete confirmation dialog
   const handleDeleteClick = (article: Article) => {
+    // First set the article, then open the dialog
     setArticleToDelete(article);
-    setDeleteDialogOpen(true);
+    // Use timeout to ensure state update completes
+    setTimeout(() => {
+      setDeleteDialogOpen(true);
+    }, 50);
   };
 
   // Handle confirming article deletion
@@ -265,7 +318,10 @@ export default function AdminArticleManagementPage() {
       );
       
       setDeleteDialogOpen(false);
-      setArticleToDelete(null);
+      // Wait before clearing the article state
+      setTimeout(() => {
+        setArticleToDelete(null);
+      }, 200);
       
       // Refresh stats after deletion
       fetchStats();
@@ -277,20 +333,35 @@ export default function AdminArticleManagementPage() {
 
   // Handle opening edit dialog
   const handleEditClick = (article: Article) => {
-    setArticleToEdit(article);
+    // Clone the article data to avoid reference issues
+    const articleData = {...article};
+    
+    // Initialize the form data first
     setFormData({
-      title: article.title,
-      content: article.content || '',
-      status: article.status
+      title: articleData.title,
+      content: articleData.content || '',
+      status: articleData.status as 'draft' | 'pending' | 'published' | 'rejected'
     });
-    setEditDialogOpen(true);
+    
+    // Set the article and open dialog with a delay
+    setArticleToEdit(articleData);
+    setTimeout(() => {
+      setEditDialogOpen(true);
+    }, 50);
   };
 
   // Handle opening feedback dialog
   const handleFeedbackClick = (article: Article) => {
-    setFeedbackArticle(article);
+    // Clone the article data to avoid reference issues
+    const articleData = {...article};
+    
     setFeedback('');
-    setFeedbackDialogOpen(true);
+    setFeedbackArticle(articleData);
+    
+    // Use timeout to ensure state update completes
+    setTimeout(() => {
+      setFeedbackDialogOpen(true);
+    }, 50);
   };
 
   // Handle form input changes
@@ -301,7 +372,11 @@ export default function AdminArticleManagementPage() {
 
   // Handle status change in dropdown
   const handleStatusChange = (value: string) => {
-    setFormData(prev => ({ ...prev, status: value as 'draft' | 'pending' | 'published' | 'rejected' }));
+    // Simple value update, no side effects that could cause recursion
+    setFormData(prev => ({ 
+      ...prev, 
+      status: value as 'draft' | 'pending' | 'published' | 'rejected' 
+    }));
   };
 
   // Handle edit form submission
@@ -328,8 +403,13 @@ export default function AdminArticleManagementPage() {
         )
       );
       
+      // Close dialog and reset state
       setEditDialogOpen(false);
-      setArticleToEdit(null);
+      
+      // Wait for dialog to close before resetting article state
+      setTimeout(() => {
+        setArticleToEdit(null);
+      }, 200);
       
       // Refresh stats if status changed
       fetchStats();
@@ -338,6 +418,18 @@ export default function AdminArticleManagementPage() {
       console.error(err);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Handle viewing an article safely
+  const handleViewArticle = async (id: number) => {
+    try {
+      // Check if the article exists before navigating
+      await adminArticleService.getArticleDetails(id);
+      navigate(`/admin/articles/${id}`);
+    } catch (err) {
+      console.error(`Error viewing article ${id}:`, err);
+      toast.error('Article not found or cannot be accessed');
     }
   };
 
@@ -375,6 +467,49 @@ export default function AdminArticleManagementPage() {
       opacity: 1, 
       y: 0,
       transition: { duration: 0.3 }
+    }
+  };
+
+  // Handle dialog close functions - ensure clean state reset
+  const handleCloseEditDialog = () => {
+    setEditDialogOpen(false);
+    // Reset state after dialog animation completes
+    setTimeout(() => {
+      setArticleToEdit(null);
+    }, 200);
+  };
+
+  const handleCloseFeedbackDialog = () => {
+    setFeedbackDialogOpen(false);
+    // Reset state after dialog animation completes
+    setTimeout(() => {
+      setFeedback('');
+      setFeedbackArticle(null);
+    }, 200);
+  };
+
+  const handleCloseDeleteDialog = () => {
+    setDeleteDialogOpen(false);
+    // Reset state after dialog animation completes
+    setTimeout(() => {
+      setArticleToDelete(null);
+    }, 200);
+  };
+
+  // Handle filter status change
+  const handleFilterStatusChange = (value: string) => {
+    setFilterStatus(value);
+    // If changing filter via dropdown, fetch filtered articles from API for better performance
+    if (value !== 'all') {
+      adminArticleService.getAllArticles(value)
+        .then(data => setArticles(data))
+        .catch(err => {
+          console.error('Error fetching filtered articles:', err);
+          toast.error('Failed to filter articles');
+        });
+    } else {
+      // If selecting "all", fetch all articles
+      fetchArticles();
     }
   };
 
@@ -418,7 +553,7 @@ export default function AdminArticleManagementPage() {
             <CardTitle className="text-lg">Total Articles</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{stats.total}</p>
+            <p className="text-3xl font-bold">{countStats.total}</p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-md bg-gradient-to-br from-green-50 to-white dark:from-gray-800 dark:to-gray-900">
@@ -426,7 +561,7 @@ export default function AdminArticleManagementPage() {
             <CardTitle className="text-lg">Published</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{stats.published}</p>
+            <p className="text-3xl font-bold">{countStats.published}</p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-md bg-gradient-to-br from-yellow-50 to-white dark:from-gray-800 dark:to-gray-900">
@@ -434,7 +569,7 @@ export default function AdminArticleManagementPage() {
             <CardTitle className="text-lg">Pending</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{stats.pending}</p>
+            <p className="text-3xl font-bold">{countStats.pending}</p>
           </CardContent>
         </Card>
         <Card className="border-none shadow-md bg-gradient-to-br from-blue-50 to-white dark:from-gray-800 dark:to-gray-900">
@@ -442,7 +577,7 @@ export default function AdminArticleManagementPage() {
             <CardTitle className="text-lg">Drafts</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{stats.draft}</p>
+            <p className="text-3xl font-bold">{countStats.draft}</p>
           </CardContent>
         </Card>
       </div>
@@ -471,32 +606,11 @@ export default function AdminArticleManagementPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            <Select value={filterStatus} onValueChange={(value) => {
-              setFilterStatus(value);
-              // If changing filter via dropdown, fetch filtered articles from API for better performance
-              if (value !== 'all') {
-                adminArticleService.getAllArticles(value)
-                  .then(data => setArticles(data))
-                  .catch(err => {
-                    console.error('Error fetching filtered articles:', err);
-                    toast.error('Failed to filter articles');
-                  });
-              } else {
-                // If selecting "all", fetch all articles
-                fetchArticles();
-              }
-            }}>
-              <SelectTrigger className="w-full sm:w-40">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="published">Published</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Replace Radix UI Select with simple custom dropdown */}
+            <FilterDropdown 
+              value={filterStatus} 
+              onChange={handleFilterStatusChange} 
+            />
           </div>
         </CardHeader>
         <CardContent>
@@ -534,16 +648,19 @@ export default function AdminArticleManagementPage() {
                   {filteredArticles.map((article) => (
                     <motion.tr key={article.id} variants={itemVariants}>
                       <TableCell className="font-medium">{article.title}</TableCell>
-                      <TableCell>{article.author_name}</TableCell>
+                      <TableCell>{typeof article.author === 'string' ? article.author : article.author_name}</TableCell>
                       <TableCell>{getStatusBadge(article.status)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {/* View action */}
-                          <Link to={`/admin/articles/${article.id}`}>
-                            <Button variant="ghost" size="icon" title="View">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </Link>
+                          {/* View action - safely handle navigation */}
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            title="View"
+                            onClick={() => handleViewArticle(article.id)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           
                           {/* Edit action */}
                           <Button 
@@ -623,158 +740,169 @@ export default function AdminArticleManagementPage() {
       </Card>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm Delete</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete "{articleToDelete?.title}"? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex justify-between">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Article Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Edit Article</DialogTitle>
-            <DialogDescription>
-              Make changes to the article details below.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleEditSubmit}>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleFormChange}
-                  placeholder="Article title"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="content">Content</Label>
-                <Textarea
-                  id="content"
-                  name="content"
-                  value={formData.content}
-                  onChange={handleFormChange}
-                  placeholder="Article content"
-                  rows={8}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="status">Status</Label>
-                <Select value={formData.status} onValueChange={handleStatusChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="pending">Pending Review</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" type="button" onClick={() => setEditDialogOpen(false)}>
+      {articleToDelete && (
+        <Dialog 
+          open={deleteDialogOpen} 
+          onOpenChange={handleCloseDeleteDialog}
+          modal // Force modal mode to prevent focus issues
+        >
+          <DialogContent onInteractOutside={(e) => e.preventDefault()}>
+            <DialogHeader>
+              <DialogTitle>Confirm Delete</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete "{articleToDelete?.title}"? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex justify-between">
+              <Button variant="outline" onClick={handleCloseDeleteDialog}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Changes'
-                )}
+              <Button variant="destructive" onClick={handleDeleteConfirm}>
+                Delete
               </Button>
             </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Edit Article Dialog */}
+      {articleToEdit && (
+        <Dialog 
+          open={editDialogOpen} 
+          onOpenChange={handleCloseEditDialog}
+          modal // Force modal mode to prevent focus issues
+        >
+          <DialogContent 
+            className="max-w-3xl"
+            onInteractOutside={(e) => e.preventDefault()}
+          >
+            <DialogHeader>
+              <DialogTitle>Edit Article</DialogTitle>
+              <DialogDescription>
+                Make changes to the article details below.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditSubmit}>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    name="title"
+                    value={formData.title}
+                    onChange={handleFormChange}
+                    placeholder="Article title"
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="content">Content</Label>
+                  <Textarea
+                    id="content"
+                    name="content"
+                    value={formData.content}
+                    onChange={handleFormChange}
+                    placeholder="Article content"
+                    rows={8}
+                    required
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="status">Status</Label>
+                  {/* Replace Radix UI Select with simple custom dropdown */}
+                  <StatusDropdown
+                    value={formData.status}
+                    onChange={handleStatusChange}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" type="button" onClick={handleCloseEditDialog}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save Changes'
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Feedback Dialog */}
-      <Dialog open={feedbackDialogOpen} onOpenChange={setFeedbackDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {feedbackArticle?.status === 'pending' ? 'Reject Article' : 'Add Feedback'}
-            </DialogTitle>
-            <DialogDescription>
-              {feedbackArticle?.status === 'pending' 
-                ? 'Provide feedback about why this article is being rejected.'
-                : 'Add editorial feedback to this article.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="feedback">Feedback</Label>
-            <Textarea
-              id="feedback"
-              value={feedback}
-              onChange={(e) => setFeedback(e.target.value)}
-              placeholder="Enter your feedback here..."
-              rows={5}
-              className="mt-2"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setFeedbackDialogOpen(false);
-              setFeedback('');
-              setFeedbackArticle(null);
-            }}>
-              Cancel
-            </Button>
-            {feedbackArticle?.status === 'pending' ? (
-              <Button
-                variant="destructive"
-                onClick={() => handleReject(feedbackArticle.id)}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Rejecting...
-                  </>
-                ) : (
-                  'Reject Article'
-                )}
+      {feedbackArticle && (
+        <Dialog 
+          open={feedbackDialogOpen} 
+          onOpenChange={handleCloseFeedbackDialog}
+          modal // Force modal mode to prevent focus issues
+        >
+          <DialogContent onInteractOutside={(e) => e.preventDefault()}>
+            <DialogHeader>
+              <DialogTitle>
+                {feedbackArticle?.status === 'pending' ? 'Reject Article' : 'Add Feedback'}
+              </DialogTitle>
+              <DialogDescription>
+                {feedbackArticle?.status === 'pending' 
+                  ? 'Provide feedback about why this article is being rejected.'
+                  : 'Add editorial feedback to this article.'}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Label htmlFor="feedback">Feedback</Label>
+              <Textarea
+                id="feedback"
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Enter your feedback here..."
+                rows={5}
+                className="mt-2"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={handleCloseFeedbackDialog}>
+                Cancel
               </Button>
-            ) : (
-              <Button
-                onClick={handleAddFeedback}
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  'Submit Feedback'
-                )}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              {feedbackArticle?.status === 'pending' ? (
+                <Button
+                  variant="destructive"
+                  onClick={() => handleReject(feedbackArticle.id)}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Rejecting...
+                    </>
+                  ) : (
+                    'Reject Article'
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleAddFeedback}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Feedback'
+                  )}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -66,23 +66,24 @@ export default function ArticleCard({
   const handleLike = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-
+  
     if (isLikeLoading) return;
-
+  
     try {
       setIsLikeLoading(true);
       await articleService.toggleLike(article.id);
-
+  
       const newState = !isLikedState;
       setIsLikedState(newState);
       setLikesCount(prevCount => newState ? prevCount + 1 : Math.max(0, prevCount - 1));
-
+  
+      // Make sure this prop is passed from the parent
       if (setLikedArticles) {
         setLikedArticles((prev) =>
           newState ? [...prev, article.id] : prev.filter((id) => id !== article.id)
         );
       }
-
+  
       toast.success(newState ? 'Article liked' : 'Article unliked');
     } catch (error) {
       toast.error('Failed to update like status');

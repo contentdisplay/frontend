@@ -166,6 +166,7 @@ const ArticleCard = ({
 };
 
 export default function WriterArticlesPage() {
+  const [walletInfo, setWalletInfo] = useState<WalletInfo | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
   const [articles, setArticles] = useState<Article[]>([]);
@@ -264,11 +265,13 @@ export default function WriterArticlesPage() {
   const loadWalletInfo = async () => {
     try {
       const data = await walletService.getWalletInfo();
-      setWalletBalance(parseFloat(data.balance) || 0);
+      setWalletInfo(data); // Store the complete wallet info
+      setWalletBalance(parseFloat(data.balance) || 0); // Keep this for backward compatibility
     } catch (error) {
       console.error('Failed to load wallet info:', error);
       toast.error('Failed to load wallet information');
       setWalletBalance(0);
+      setWalletInfo(null);
     }
   };
   
@@ -541,21 +544,21 @@ export default function WriterArticlesPage() {
         </Card>
         
         <Card className="border-none shadow-md bg-gradient-to-br from-amber-50 to-white dark:from-gray-800 dark:to-gray-900">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Total Earnings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold">₹{stats.earnings.toFixed(2)}</p>
-            <div className="mt-4">
-              <Progress value={Math.min(stats.earnings, 1000) / 10} className="h-2" />
-              <div className="flex mt-2">
-                <Badge variant="outline" className="bg-amber-100 text-amber-800">
-                  <DollarSign className="h-3 w-3 mr-1" /> From All Articles
-                </Badge>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+  <CardHeader className="pb-2">
+    <CardTitle className="text-lg">Total Earnings</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <p className="text-3xl font-bold">₹{walletInfo?.reward_points?.toFixed(2) || stats.earnings.toFixed(2)}</p>
+    <div className="mt-4">
+      <Progress value={Math.min((walletInfo?.reward_points || stats.earnings), 1000) / 10} className="h-2" />
+      <div className="flex mt-2">
+        <Badge variant="outline" className="bg-amber-100 text-amber-800">
+          <DollarSign className="h-3 w-3 mr-1" /> Reward Points
+        </Badge>
+      </div>
+    </div>
+  </CardContent>
+</Card>
       </div>
       
       <Card className="border-none shadow-md mb-8">
