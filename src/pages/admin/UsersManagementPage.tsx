@@ -8,10 +8,16 @@ import { toast } from 'sonner';
 import userService from '@/services/admin/userService';
 import { motion } from 'framer-motion';
 import { User } from '@/services/admin/userService';
-import { Loader2, Search, RefreshCw } from 'lucide-react';
+import { Loader2, Search, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export default function UsersManagementPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [pagination, setPagination] = useState({
+    count: 0,
+    next: null as string | null,
+    previous: null as string | null,
+    currentPage: 1
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -33,17 +39,39 @@ export default function UsersManagementPage() {
     fetchUsers();
   }, []);
 
-  const fetchUsers = async () => {
+  // Helper function to extract page number from URL
+  const extractPageFromUrl = (url: string): number => {
+    const match = url.match(/page=(\d+)/);
+    return match ? parseInt(match[1], 10) : 1;
+  };
+
+  const fetchUsers = async (url?: string) => {
     try {
       setIsLoading(true);
-      const data = await userService.getUsers();
-      // Ensure data is an array
-      if (Array.isArray(data)) {
+      const data = await userService.getUsers(url);
+      
+      // Check if data has the expected pagination structure
+      if (data && typeof data === 'object' && Array.isArray(data.results)) {
+        setUsers(data.results);
+        setPagination({
+          count: data.count || 0,
+          next: data.next,
+          previous: data.previous,
+          currentPage: url ? extractPageFromUrl(url) : 1
+        });
+      } else if (Array.isArray(data)) {
+        // Handle case where API might return an array directly
         setUsers(data);
+        setPagination({
+          count: data.length,
+          next: null,
+          previous: null,
+          currentPage: 1
+        });
       } else {
-        // If not an array, check if it has results property or convert to empty array
-        setUsers(data?.results || []);
-        console.error('Expected array of users but got:', data);
+        console.error('Expected array of users or paginated object but got:', data);
+        setUsers([]);
+        toast.error('Received invalid user data format');
       }
     } catch (err) {
       toast.error('Failed to fetch users');
@@ -145,7 +173,7 @@ export default function UsersManagementPage() {
         </h1>
         <div className="flex gap-2">
           <Button 
-            onClick={fetchUsers} 
+            onClick={() => fetchUsers()} 
             variant="outline" 
             size="icon" 
             className="rounded-full"
@@ -218,7 +246,14 @@ export default function UsersManagementPage() {
       >
         <Card className="border-none shadow-lg bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900">
           <CardHeader>
-            <CardTitle>Users ({filteredUsers.length})</CardTitle>
+            <CardTitle className="flex justify-between items-center">
+              <span>Users ({filteredUsers.length})</span>
+              {pagination.count > 0 && (
+                <span className="text-sm text-gray-500 font-normal">
+                  Total: {pagination.count} users
+                </span>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -230,67 +265,100 @@ export default function UsersManagementPage() {
                 {searchQuery ? "No users found matching your search" : "No users found"}
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>ID</TableHead>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Verified</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>{user.id}</TableCell>
-                      <TableCell className="font-medium">{user.username}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell>
-                        {user.is_verified ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            Verified
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                            Unverified
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <select
-                          value={user.profile?.role || 'normal'}
-                          onChange={(e) => handleUpdateRole(user.id, e.target.value)}
-                          className="p-1 border rounded text-sm"
-                        >
-                          <option value="normal">Normal User</option>
-                          <option value="writer">Content Writer</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => openEditDialog(user)}
-                          >
-                            Edit
-                          </Button>
-                          <Button 
-                            variant="destructive" 
-                            size="sm"
-                            onClick={() => handleDeleteUser(user.id)}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ID</TableHead>
+                      <TableHead>Username</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Verified</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsers.map((user) => (
+                      <TableRow key={user.id}>
+                        <TableCell>{user.id}</TableCell>
+                        <TableCell className="font-medium">{user.username}</TableCell>
+                        <TableCell>{user.email}</TableCell>
+                        <TableCell>
+                          {user.is_verified ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100">
+                              Verified
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100">
+                              Unverified
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <select
+                            value={user.profile?.role || 'normal'}
+                            onChange={(e) => handleUpdateRole(user.id, e.target.value)}
+                            className="p-1 border rounded text-sm"
+                          >
+                            <option value="normal">Normal User</option>
+                            <option value="writer">Content Writer</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => openEditDialog(user)}
+                            >
+                              Edit
+                            </Button>
+                            <Button 
+                              variant="destructive" 
+                              size="sm"
+                              onClick={() => handleDeleteUser(user.id)}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                
+                {/* Pagination Controls */}
+                {(pagination.next || pagination.previous) && (
+                  <div className="flex justify-between items-center mt-4">
+                    <div className="text-sm text-gray-500">
+                      Page {pagination.currentPage}
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!pagination.previous}
+                        onClick={() => pagination.previous && fetchUsers(pagination.previous)}
+                        className="flex items-center gap-1"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!pagination.next}
+                        onClick={() => pagination.next && fetchUsers(pagination.next)}
+                        className="flex items-center gap-1"
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
