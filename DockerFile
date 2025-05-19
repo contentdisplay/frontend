@@ -1,0 +1,22 @@
+# Use Node.js base image
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and install dependencies
+COPY package.json package-lock.json* ./
+RUN npm install
+
+# Copy the rest of the frontend code
+COPY . .
+
+# Build the frontend
+RUN npm run build
+
+# Serve with a lightweight server
+RUN npm install -g serve
+CMD ["serve", "-s", "dist", "-l", "3000"]
+
+# Expose port
+EXPOSE 3000
