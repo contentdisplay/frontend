@@ -4,7 +4,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 
 const api = axios.create({
-  baseURL: 'http://e8gwoskow4wso0k480sokc00.93.127.128.12.sslip.io//api',
+  baseURL: 'http://cc44s4g0okcsgg4ksws480ws.93.127.128.12.sslip.io//api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -41,7 +41,7 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
         
-        const response = await axios.post('http://e8gwoskow4wso0k480sokc00.93.127.128.12.sslip.io//api/auth/token/refresh/', {
+        const response = await axios.post('http://cc44s4g0okcsgg4ksws480ws.93.127.128.12.sslip.io//api/auth/token/refresh/', {
           refresh: refreshToken,
         });
         
