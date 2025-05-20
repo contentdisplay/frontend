@@ -457,29 +457,29 @@ const articleService = {
   },
   
   // Collect reward for an article
-  collectReward: async (articleId: number): Promise<any> => {
-    try {
-      const response = await api.post(`/articles/${articleId}/collect/`, {}, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
-      });
-      console.log('Reward collected:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error("Collect reward error:", error);
+  // collectReward: async (articleId: number): Promise<any> => {
+  //   try {
+  //     const response = await api.post(`/articles/${articleId}/collect/`, {}, {
+  //       headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+  //     });
+  //     console.log('Reward collected:', response.data);
+  //     return response.data;
+  //   } catch (error) {
+  //     console.error("Collect reward error:", error);
       
-      const errorObj = error as any;
-      const errorMessage = errorObj?.response?.data?.detail || 'Failed to collect reward';
+  //     const errorObj = error as any;
+  //     const errorMessage = errorObj?.response?.data?.detail || 'Failed to collect reward';
       
-      // Customize error messages for better user experience
-      if (errorMessage.includes('Must read for at least 15 minutes')) {
-        throw new Error('You need to read the article for the minimum required time to claim the reward.');
-      } else if (errorMessage.includes('Reward already collected')) {
-        throw new Error('You have already claimed the reward for this article.');
-      }
+  //     // Customize error messages for better user experience
+  //     if (errorMessage.includes('Must read for at least 15 minutes')) {
+  //       throw new Error('You need to read the article for the minimum required time to claim the reward.');
+  //     } else if (errorMessage.includes('Reward already collected')) {
+  //       throw new Error('You have already claimed the reward for this article.');
+  //     }
       
-      throw error;
-    }
-  },
+  //     throw error;
+  //   }
+  // },
   // collectArticleReward: async (articleId: number): Promise<any> => {
   //   try {
   //     const response = await api.post(`/articles/${articleId}/earnings/collect/`, {}, {
