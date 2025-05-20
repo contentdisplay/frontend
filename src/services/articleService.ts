@@ -480,18 +480,18 @@ const articleService = {
       throw error;
     }
   },
-  collectArticleReward: async (articleId: number): Promise<any> => {
-    try {
-      const response = await api.post(`/articles/${articleId}/earnings/collect/`, {}, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
-      });
-      console.log('Article rewards collected:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error(`Failed to collect rewards for article ${articleId}:`, error);
-      throw error;
-    }
-  },
+  // collectArticleReward: async (articleId: number): Promise<any> => {
+  //   try {
+  //     const response = await api.post(`/articles/${articleId}/earnings/collect/`, {}, {
+  //       headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+  //     });
+  //     console.log('Article rewards collected:', response.data);
+  //     return response.data;
+  //   } catch (error) {
+  //     console.error(`Failed to collect rewards for article ${articleId}:`, error);
+  //     throw error;
+  //   }
+  // },
   collectArticleReward: async (articleId: number): Promise<any> => {
   try {
     const response = await api.post(`/articles/${articleId}/earnings/collect/`, {}, {
