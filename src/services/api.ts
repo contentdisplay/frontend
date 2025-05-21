@@ -4,7 +4,7 @@ import axios from 'axios';
 import Cookies from 'js-cookie';
 
 const api = axios.create({
-  baseURL: 'http://cc44s4g0okcsgg4ksws480ws.93.127.128.12.sslip.io/api',
+  baseURL: 'http://api.writelyrewarded.digital/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -47,7 +47,7 @@ api.interceptors.response.use(
         }
 
      
-        const response = await axios.post('http://cc44s4g0okcsgg4ksws480ws.93.127.128.12.sslip.io/api/auth/token/refresh/', {
+        const response = await axios.post('http://api.writelyrewarded.digital/api/auth/token/refresh/', {
           refresh: refreshToken,
         });
         
