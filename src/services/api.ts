@@ -3,12 +3,12 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
-const api = axios.create({
-  baseURL: 'https://api.writelyrewarded.digital/api',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+// const api = axios.create({
+//   baseURL: 'https://api.writelyrewarded.digital/api',
+//   headers: {
+//     'Content-Type': 'application/json',
+//   },
+// });
 
 // const api = axios.create({
 //   baseURL: 'https://writelyrewarded.digital/api',
@@ -17,12 +17,12 @@ const api = axios.create({
 //   },
 // });
 
-// const api = axios.create({
-//   baseURL: 'http://cc44s4g0okcsgg4ksws480ws.93.127.128.12.sslip.io/api',
-//   headers: {
-//     'Content-Type': 'application/json',
-//   },
-// });
+const api = axios.create({
+  baseURL: 'http://cc44s4g0okcsgg4ksws480ws.93.127.128.12.sslip.io/api',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 // Add a request interceptor to include auth tokens
 api.interceptors.request.use(
@@ -55,16 +55,16 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        const response = await axios.post('https://api.writelyrewarded.digital/api/auth/token/refresh/', {
-          refresh: refreshToken,
-        });
+        // const response = await axios.post('https://api.writelyrewarded.digital/api/auth/token/refresh/', {
+        //   refresh: refreshToken,
+        // });
         
         // const response = await axios.post('https://writelyrewarded.digital/api/auth/token/refresh/', {
         //   refresh: refreshToken,
         // });
-        // const response = await axios.post('http://cc44s4g0okcsgg4ksws480ws.93.127.128.12.sslip.io/api/auth/token/refresh/', {
-        //   refresh: refreshToken,
-        // });
+        const response = await axios.post('http://cc44s4g0okcsgg4ksws480ws.93.127.128.12.sslip.io/api/auth/token/refresh/', {
+          refresh: refreshToken,
+        });
         
         const { access } = response.data;
         
