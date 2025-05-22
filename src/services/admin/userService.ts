@@ -1,6 +1,5 @@
 // services/admin/userService.ts
 import api from '../api';
-import { UserProfile } from '../profileService';
 
 export interface User {
   id: number;
@@ -9,103 +8,173 @@ export interface User {
   is_verified: boolean;
   is_staff: boolean;
   is_superuser: boolean;
-  profile: UserProfile;
-}
-
-export interface CreateUserPayload {
-  username: string;
-  email: string;
-  password: string;
+  date_joined: string;
   profile?: {
-    role: string;
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    phone_number?: string;
+    address?: string;
+    age?: number;
+    gender?: string;
+    role?: string;
+    bio?: string;
+    photo?: string;
   };
 }
 
+export interface CreateUserData {
+  username: string;
+  email: string;
+  password: string;
+  profile: {
+    role: string;
+    first_name?: string;
+    last_name?: string;
+  };
+}
+
+export interface UpdateUserData {
+  username: string;
+  email: string;
+  profile: {
+    role: string;
+    first_name?: string;
+    last_name?: string;
+    phone_number?: string;
+    address?: string;
+    age?: number;
+    gender?: string;
+    bio?: string;
+  };
+}
+
+export interface PaginatedUsers {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: User[];
+}
+
 const userService = {
-  getUsers: async (): Promise<User[]> => {
+  // Get all users with pagination
+  getUsers: async (url?: string): Promise<PaginatedUsers | User[]> => {
     try {
-      const response = await api.get('/auth/admin/users/');
+      const endpoint = url || '/auth/admin/users/';
+      const response = await api.get(endpoint);
       return response.data;
     } catch (error: any) {
-      console.error('Failed to get users', error);
+      console.error('Error fetching users:', error);
       throw new Error(error.response?.data?.detail || 'Failed to fetch users');
     }
   },
 
-  getUser: async (id: number): Promise<User> => {
+  // Get single user details
+  getUser: async (userId: number): Promise<User> => {
     try {
-      const response = await api.get(`/auth/admin/users/${id}/`);
+      const response = await api.get(`/auth/admin/users/${userId}/`);
       return response.data;
     } catch (error: any) {
-      console.error('Failed to get user', error);
-      throw new Error(error.response?.data?.detail || 'Failed to fetch user');
+      console.error('Error fetching user:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to fetch user details');
     }
   },
 
-  createUser: async (userData: CreateUserPayload): Promise<User> => {
+  // Create new user
+  createUser: async (userData: CreateUserData): Promise<User> => {
     try {
-      const response = await api.post('/auth/register/', userData);
-      return response.data.user;
-    } catch (error: any) {
-      console.error('Failed to create user', error);
-      throw new Error(error.response?.data?.detail || 'Failed to create user');
-    }
-  },
-
-  updateUser: async (id: number, userData: Partial<User>): Promise<User> => {
-    try {
-      const response = await api.patch(`/auth/admin/users/${id}/`, userData);
+      const response = await api.post('/auth/admin/users/create/', userData);
       return response.data;
     } catch (error: any) {
-      console.error('Failed to update user', error);
-      throw new Error(error.response?.data?.detail || 'Failed to update user');
+      console.error('Error creating user:', error);
+      const errorMessage = error.response?.data?.detail || 
+        (error.response?.data ? Object.values(error.response.data).flat().join(", ") : 
+        'Failed to create user');
+      throw new Error(errorMessage);
     }
   },
 
-  deleteUser: async (id: number): Promise<void> => {
+  // Update user
+  updateUser: async (userId: number, userData: UpdateUserData): Promise<User> => {
     try {
-      await api.delete(`/auth/admin/users/${id}/`);
+      const response = await api.put(`/auth/admin/users/${userId}/update/`, userData);
+      return response.data;
     } catch (error: any) {
-      console.error('Failed to delete user', error);
+      console.error('Error updating user:', error);
+      const errorMessage = error.response?.data?.detail || 
+        (error.response?.data ? Object.values(error.response.data).flat().join(", ") : 
+        'Failed to update user');
+      throw new Error(errorMessage);
+    }
+  },
+
+  // Delete user
+  deleteUser: async (userId: number): Promise<void> => {
+    try {
+      await api.delete(`/auth/admin/users/${userId}/delete/`);
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
       throw new Error(error.response?.data?.detail || 'Failed to delete user');
     }
   },
 
-  getPendingPromotions: async (): Promise<{
-    id: number;
-    username: string;
-    email: string;
-    status: string;
-    requested_at: string;
-  }[]> => {
+  // Update user role
+  updateUserRole: async (userId: number, role: string): Promise<any> => {
     try {
-      const response = await api.get('/auth/promotions/pending/');
+      const response = await api.post(`/auth/admin/users/${userId}/role/`, { role });
       return response.data;
     } catch (error: any) {
-      console.error('Failed to get pending promotions', error);
-      throw new Error(error.response?.data?.detail || 'Failed to fetch pending promotions');
+      console.error('Error updating user role:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to update user role');
     }
   },
 
-  approvePromotion: async (id: number): Promise<{ detail: string }> => {
+  // Get user profile
+  getUserProfile: async (userId: number): Promise<any> => {
     try {
-      const response = await api.post(`/auth/promotions/approve/${id}/`);
+      const response = await api.get(`/auth/admin/users/${userId}/profile/`);
       return response.data;
     } catch (error: any) {
-      console.error('Failed to approve promotion', error);
-      throw new Error(error.response?.data?.detail || 'Failed to approve promotion');
+      console.error('Error fetching user profile:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to fetch user profile');
     }
   },
 
-  rejectPromotion: async (id: number, reason: string): Promise<{ detail: string }> => {
+  // Get user wallet
+  getUserWallet: async (userId: number): Promise<any> => {
     try {
-      const response = await api.post(`/auth/promotions/reject/${id}/`, { reason });
+      const response = await api.get(`/auth/admin/users/${userId}/wallet/`);
       return response.data;
     } catch (error: any) {
-      console.error('Failed to reject promotion', error);
-      throw new Error(error.response?.data?.detail || 'Failed to reject promotion');
+      console.error('Error fetching user wallet:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to fetch user wallet');
     }
-  }
+  },
+
+  // Bulk actions
+  bulkActions: async (action: string, userIds: number[]): Promise<any> => {
+    try {
+      const response = await api.post('/auth/admin/users/bulk-actions/', {
+        action,
+        user_ids: userIds
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Error performing bulk action:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to perform bulk action');
+    }
+  },
+
+  // Get dashboard stats
+  getDashboardStats: async (): Promise<any> => {
+    try {
+      const response = await api.get('/auth/admin/dashboard/');
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching dashboard stats:', error);
+      throw new Error(error.response?.data?.detail || 'Failed to fetch dashboard statistics');
+    }
+  },
 };
 
 export default userService;

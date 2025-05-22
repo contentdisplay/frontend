@@ -50,6 +50,7 @@ import ManageUserDashboardPage from './pages/admin/ManageUserDashboardPage';
 import WalletQRManagement from './components/admin/WalletQRManagement';
 import PaymentRequests from './components/admin/PaymentRequest';
 import { ErrorBoundary } from '@/components/admin/ErrorBoundary';
+import PromoCodeManagement from '@/pages/admin/PromoCodeManagement';
 
 
 // Components
@@ -130,6 +131,7 @@ const App = () => (
                 <Route path="promotions" element={<PromotionRequestsPage />} />
                 <Route path="notifications" element={<NotificationManagementPage />} />
                 <Route path="userdashboard" element={<ManageUserDashboardPage/>}/>
+                <Route path="promocodes" element={<PromoCodeManagement/>}/>
                 <Route
                   path="wallet-qr"
                   element={

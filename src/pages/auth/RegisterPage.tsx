@@ -1,4 +1,3 @@
-// RegisterPage.tsx - Updated with promo code field
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -14,48 +13,36 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAuth } from "@/context/AuthContext";
+import { UserRole } from "@/types/auth";
+import OtpVerificationDialog from "@/components/auth/OtpVerificationDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { User, Mail, Lock, Gift, UserCheck } from "lucide-react";
+import { AtSign, KeyRound, User, Mail, Check } from "lucide-react";
 import { toast } from "sonner";
-import authService from "@/services/authService";
 
 const formSchema = z.object({
   username: z
     .string()
-    .min(3, { message: "Username must be at least 3 characters" })
-    .max(20, { message: "Username must be less than 20 characters" }),
+    .min(2, { message: "Username must be at least 2 characters" }),
   email: z
     .string()
-    .email({ message: "Please enter a valid email address" }),
+    .min(1, { message: "Email is required" })
+    .email({ message: "Invalid email address" }),
   password: z
     .string()
     .min(6, { message: "Password must be at least 6 characters" }),
-  confirmPassword: z
-    .string()
-    .min(6, { message: "Password must be at least 6 characters" }),
-  referralCode: z
-    .string()
-    .optional(),
-  promoCode: z
-    .string()
-    .optional(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
+  role: z.enum(["user", "writer"]),
+  referralCode: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, requestWriterPromotion } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [isValidatingPromo, setIsValidatingPromo] = useState(false);
-  const [promoValidation, setPromoValidation] = useState<{
-    valid: boolean;
-    message: string;
-    amount?: string;
-  } | null>(null);
+  const [showOtpDialog, setShowOtpDialog] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -63,62 +50,42 @@ export default function RegisterPage() {
       username: "",
       email: "",
       password: "",
-      confirmPassword: "",
+      role: "user",
       referralCode: "",
-      promoCode: "",
     },
   });
-
-  const validatePromoCode = async (code: string) => {
-    if (!code.trim()) {
-      setPromoValidation(null);
-      return;
-    }
-
-    setIsValidatingPromo(true);
-    try {
-      const response = await authService.validatePromoCode(code);
-      setPromoValidation({
-        valid: response.valid,
-        message: response.message,
-        amount: response.bonus_amount
-      });
-    } catch (error: any) {
-      setPromoValidation({
-        valid: false,
-        message: error.message || "Error validating promo code"
-      });
-    } finally {
-      setIsValidatingPromo(false);
-    }
-  };
 
   const onSubmit = async (values: FormValues) => {
     try {
       setIsLoading(true);
+      const email = await register(
+        values.username,
+        values.email,
+        values.password,
+        values.role as UserRole,
+        values.referralCode || undefined
+      );
       
-      const registrationData = {
-        username: values.username,
-        email: values.email,
-        password: values.password,
-        referral_code: values.referralCode || undefined,
-        promo_code: values.promoCode || undefined,
-      };
-      
-      const response = await register(registrationData);
-      
-      // Show success message with promo bonus if applicable
-      if (response.promo_bonus) {
-        toast.success(`Registration successful! ${response.promo_bonus.message}`, {
-          duration: 5000,
-        });
-      } else {
-        toast.success("Registration successful! Please check your email for verification.");
+      // If they selected 'writer' role, send the promotion request
+      if (values.role === "writer") {
+        try {
+          await requestWriterPromotion();
+          toast.success("Content writer promotion request submitted for approval.");
+        } catch (error) {
+          // Just show a warning, but continue with registration
+          toast.warning("Account created, but content writer request failed to submit.");
+        }
       }
       
+      setRegisteredEmail(email);
+      setShowOtpDialog(true);
     } catch (error: any) {
       console.error("Registration error:", error);
-      toast.error(error.message || "Registration failed. Please try again.");
+      if (error.code === "USER_ALREADY_EXISTS" || error.message.includes("already registered")) {
+        toast.error("This email or username is already registered. Please try logging in.");
+      } else {
+        toast.error(error.message || "Registration failed. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -126,13 +93,13 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
+      <div className="w-full max-w-lg space-y-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">
-            Create Account
+            Create your account
           </h1>
           <p className="mt-2 text-sm text-gray-600">
-            Join us and start your journey
+            Join our community and start your journey
           </p>
         </div>
         
@@ -140,7 +107,7 @@ export default function RegisterPage() {
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">Sign up</CardTitle>
             <CardDescription className="text-center">
-              Create your account to get started
+              Enter your information to create an account
             </CardDescription>
           </CardHeader>
           
@@ -156,11 +123,7 @@ export default function RegisterPage() {
                       <FormControl>
                         <div className="relative">
                           <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input 
-                            placeholder="Enter your username" 
-                            className="pl-10" 
-                            {...field} 
-                          />
+                          <Input placeholder="Choose a username" className="pl-10" {...field} />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -173,16 +136,11 @@ export default function RegisterPage() {
                   name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>Email address</FormLabel>
                       <FormControl>
                         <div className="relative">
                           <Mail className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input 
-                            placeholder="Enter your email" 
-                            className="pl-10" 
-                            type="email"
-                            {...field} 
-                          />
+                          <Input placeholder="Enter your email" className="pl-10" {...field} type="email" />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -198,35 +156,8 @@ export default function RegisterPage() {
                       <FormLabel>Password</FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input 
-                            placeholder="Enter your password" 
-                            className="pl-10" 
-                            type="password"
-                            {...field} 
-                          />
-                        </div>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="confirmPassword"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Confirm Password</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Lock className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input 
-                            placeholder="Confirm your password" 
-                            className="pl-10" 
-                            type="password"
-                            {...field} 
-                          />
+                          <KeyRound className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                          <Input placeholder="Create a password" className="pl-10" {...field} type="password" />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -242,12 +173,8 @@ export default function RegisterPage() {
                       <FormLabel>Referral Code (Optional)</FormLabel>
                       <FormControl>
                         <div className="relative">
-                          <UserCheck className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input 
-                            placeholder="Enter referral code" 
-                            className="pl-10" 
-                            {...field} 
-                          />
+                          <AtSign className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                          <Input placeholder="Enter referral code" className="pl-10" {...field} />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -257,46 +184,40 @@ export default function RegisterPage() {
 
                 <FormField
                   control={form.control}
-                  name="promoCode"
+                  name="role"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Promo Code (Optional)</FormLabel>
-                      <FormControl>
-                        <div className="relative">
-                          <Gift className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input 
-                            placeholder="Enter promo code (e.g., ABC346)" 
-                            className="pl-10" 
-                            {...field} 
-                            onChange={(e) => {
-                              field.onChange(e);
-                              if (e.target.value) {
-                                validatePromoCode(e.target.value);
-                              } else {
-                                setPromoValidation(null);
-                              }
-                            }}
-                          />
-                        </div>
-                      </FormControl>
-                      
-                      {/* Promo code validation feedback */}
-                      {isValidatingPromo && (
-                        <div className="text-sm text-gray-500">
-                          Validating promo code...
-                        </div>
-                      )}
-                      
-                      {promoValidation && (
-                        <div className={`text-sm ${
-                          promoValidation.valid 
-                            ? 'text-green-600 bg-green-50 border border-green-200 rounded-md p-2' 
-                            : 'text-red-600'
-                        }`}>
-                          {promoValidation.message}
-                        </div>
-                      )}
-                      
+                    <FormItem className="space-y-3">
+                      {/* <FormLabel>Account Type</FormLabel> */}
+                      {/* <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                          className="flex flex-col space-y-1"
+                        >
+                          <FormItem className="flex items-center space-x-3 space-y-0 rounded-md border p-3">
+                            <FormControl>
+                              <RadioGroupItem value="user" />
+                            </FormControl>
+                            <FormLabel className="font-normal cursor-pointer flex-1">
+                              Normal User
+                              <p className="text-sm text-muted-foreground">
+                                Read and interact with content
+                              </p>
+                            </FormLabel>
+                          </FormItem>
+                          <FormItem className="flex items-center space-x-3 space-y-0 rounded-md border p-3">
+                            <FormControl>
+                              <RadioGroupItem value="writer" />
+                            </FormControl>
+                            <FormLabel className="font-normal cursor-pointer flex-1">
+                              Content Writer
+                              <p className="text-sm text-muted-foreground">
+                                Create and publish content (requires approval and ₹100 per publication)
+                              </p>
+                            </FormLabel>
+                          </FormItem>
+                        </RadioGroup>
+                      </FormControl> */}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -304,7 +225,7 @@ export default function RegisterPage() {
 
                 <Button 
                   type="submit" 
-                  className="w-full" 
+                  className="w-full mt-6" 
                   disabled={isLoading}
                   size="lg"
                 >
@@ -314,21 +235,30 @@ export default function RegisterPage() {
                       Creating account...
                     </span>
                   ) : (
-                    "Create account"
+                    <span className="flex items-center">
+                      <Check className="mr-2 h-5 w-5" />
+                      Create account
+                    </span>
                   )}
                 </Button>
+
+                <div className="text-center text-sm mt-6">
+                  <span className="text-gray-600">Already have an account?</span>{" "}
+                  <Link to="/login" className="font-medium text-purple-600 hover:text-purple-500 hover:underline">
+                    Sign in instead
+                  </Link>
+                </div>
               </form>
             </Form>
-
-            <div className="mt-6 text-center text-sm">
-              <span className="text-gray-600">Already have an account?</span>{" "}
-              <Link to="/login" className="font-medium text-purple-600 hover:text-purple-500 hover:underline">
-                Sign in
-              </Link>
-            </div>
           </CardContent>
         </Card>
       </div>
+      
+      <OtpVerificationDialog 
+        isOpen={showOtpDialog}
+        onClose={() => setShowOtpDialog(false)}
+        email={registeredEmail}
+      />
     </div>
   );
 }

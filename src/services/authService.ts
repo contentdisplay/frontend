@@ -7,8 +7,7 @@ interface RegisterPayload {
   email: string;
   password: string;
   nickname?: string;
-  referral_code?: string;
-  promo_code?: string; // Added promo code field
+  promo_code?: string; // Only promo code field now
 }
 
 interface LoginPayload {
@@ -126,7 +125,7 @@ const authService = {
     }
   },
   
-  // Add new method for promo code validation
+  // Promo code validation
   validatePromoCode: async (code: string): Promise<PromoCodeValidationResponse> => {
     try {
       const response = await api.post('/auth/promo-code/validate/', { code });
@@ -137,7 +136,7 @@ const authService = {
     }
   },
   
-  // Add new method for content writer promotion request
+  // Content writer promotion request
   requestWriterPromotion: async (): Promise<any> => {
     try {
       const response = await api.post('/auth/promotions/request/');
