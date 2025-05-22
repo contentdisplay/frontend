@@ -1,11 +1,10 @@
-// services/walletService.ts
+// services/walletService.ts - Complete updated file
 import api from './api';
-
 
 export interface WalletInfo {
   id: string;
   balance: number;
-  reward_points: number;  // Added reward_points
+  reward_points: number;
   total_earning: number;
   total_spending: number;
   user: string | number;
@@ -48,6 +47,36 @@ export interface QRCode {
   created_at: string;
 }
 
+export interface User {
+  id: number;
+  username: string;
+  full_name: string;
+  email: string;
+}
+
+export interface AdminLoadBalanceRequest {
+  user_id: number;
+  amount: number;
+  description?: string;
+  transaction_type: 'deposit' | 'reward';
+}
+
+export interface AdminLoadBalanceResponse {
+  detail: string;
+  user: string;
+  amount_added: number;
+  transaction_type: string;
+  new_balance: number;
+  new_reward_points: number;
+}
+
+export interface GiftPointsRequest {
+  recipient_id: number;
+  amount: number;
+  article_id: number;
+  message?: string;
+}
+
 const walletService = {
   getWalletInfo: async (): Promise<WalletInfo> => {
     try {
@@ -71,7 +100,6 @@ const walletService = {
       const endpoint = filter ? `/wallet/transactions/?filter=${filter}` : '/wallet/transactions/';
       const response = await api.get(endpoint);
       
-      // If the response is paginated
       const data = response.data.results || response.data;
       
       return data.map((tx: any) => ({
@@ -263,6 +291,7 @@ const walletService = {
       throw new Error(error.response?.data?.detail || 'Failed to delete QR code');
     }
   },
+
   giftPoints: async (data: GiftPointsRequest): Promise<any> => {
     try {
       const response = await api.post('/wallet/gift-points/', data, {
@@ -272,6 +301,28 @@ const walletService = {
     } catch (error) {
       console.error('Failed to gift points:', error);
       throw error;
+    }
+  },
+
+  // NEW METHODS for admin balance loading
+  getAllUsers: async (search?: string): Promise<User[]> => {
+    try {
+      const params = search ? `?search=${encodeURIComponent(search)}` : '';
+      const response = await api.get(`/wallet/admin/users/${params}`);
+      return response.data.users;
+    } catch (error: any) {
+      console.error('Get all users error:', error.message, error.response?.status, error.response?.data);
+      throw new Error(error.response?.data?.detail || 'Failed to fetch users');
+    }
+  },
+
+  adminLoadUserBalance: async (data: AdminLoadBalanceRequest): Promise<AdminLoadBalanceResponse> => {
+    try {
+      const response = await api.post('/wallet/admin/load-user-balance/', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Admin load balance error:', error.message, error.response?.status, error.response?.data);
+      throw new Error(error.response?.data?.detail || 'Failed to load user balance');
     }
   },
 };

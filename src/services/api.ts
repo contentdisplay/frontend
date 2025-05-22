@@ -11,6 +11,15 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// const api = axios.create({
+//   baseURL: 'http://127.0.0.1:8000/api',
+//   headers: {
+//     'Content-Type': 'application/json',
+//   },
+//   withCredentials: true,
+// });
+
+
 
 
 
@@ -47,6 +56,9 @@ api.interceptors.response.use(
         }
 
      
+        // const response = await axios.post('http://127.0.0.1:8000/api/auth/token/refresh/', {
+        //   refresh: refreshToken,
+        // });
         const response = await axios.post('http://api.writelyrewarded.digital/api/auth/token/refresh/', {
           refresh: refreshToken,
         });

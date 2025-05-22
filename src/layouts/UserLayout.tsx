@@ -89,7 +89,7 @@ export default function UserLayout() {
                   <div className="flex flex-col h-full">
                     <div className="flex items-center justify-between border-b p-4">
                       <div className="flex items-center gap-2">
-                        <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-500 text-transparent bg-clip-text">WrtierlyRewarded</span>
+                        <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-500 text-transparent bg-clip-text">WritelyRewarded</span>
                       </div>
                       <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(false)}>
                         <X className="h-5 w-5" />
@@ -142,12 +142,12 @@ export default function UserLayout() {
               
               {/* Desktop Logo */}
               <Link to="/dashboard" className="hidden md:flex items-center">
-                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-500 text-transparent bg-clip-text">WrtierlyRewarded</span>
+                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-500 text-transparent bg-clip-text">WritelyRewarded</span>
               </Link>
               
               {/* Mobile Logo */}
               <Link to="/dashboard" className="md:hidden">
-                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-500 text-transparent bg-clip-text">WrtierlyRewarded</span>
+                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-500 text-transparent bg-clip-text">WritelyRewarded</span>
               </Link>
             </div>
             

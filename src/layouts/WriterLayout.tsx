@@ -96,7 +96,7 @@ export default function WriterLayout() {
                     <div className="flex items-center justify-between border-b p-4">
                       <div className="flex items-center gap-2">
                         <PenTool className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                        <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-500 text-transparent bg-clip-text">WriterlyRewarded</span>
+                        <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-500 text-transparent bg-clip-text">WritelyRewarded</span>
                       </div>
                       <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(false)}>
                         <X className="h-5 w-5" />
@@ -175,13 +175,13 @@ export default function WriterLayout() {
               {/* Desktop Logo */}
               <Link to="/writer/dashboard" className="hidden md:flex items-center">
                 <PenTool className="h-6 w-6 text-purple-600 dark:text-purple-400 mr-2" />
-                <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-500 text-transparent bg-clip-text">WriterlyRewarded</span>
+                <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-500 text-transparent bg-clip-text">WritelyRewarded</span>
               </Link>
               
               {/* Mobile Logo */}
               <Link to="/writer/dashboard" className="md:hidden flex items-center">
                 <PenTool className="h-5 w-5 text-purple-600 dark:text-purple-400 mr-1" />
-                <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-500 text-transparent bg-clip-text">WriterlyRewarded</span>
+                <span className="text-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-500 text-transparent bg-clip-text">WritelyRewarded</span>
               </Link>
             </div>
             

@@ -189,7 +189,7 @@ export default function LandingPage() {
                 onClick={() => scrollToSection("hero")}
                 className="text-2xl font-bold text-[#C4B5FD]"
               >
-                WritelyRewards
+                WritelyRewarded
               </button>
             </div>
             <div className="hidden md:flex items-center space-x-4">
@@ -920,7 +920,7 @@ export default function LandingPage() {
                 </li> */}
               </ul>
             </div>
-            <div>
+            {/* <div>
               <h3 className="text-lg font-semibold text-[#C4B5FD]">Connect</h3>
               <ul className="mt-4 space-y-2">
                 <li>
@@ -939,7 +939,7 @@ export default function LandingPage() {
                   </a>
                 </li>
               </ul>
-            </div>
+            </div> */}
             {/* <div>
               <h3 className="text-lg font-semibold text-[#C4B5FD]">Newsletter</h3>
               <p className="mt-4 text-sm text-[#6B7280]">
@@ -960,7 +960,7 @@ export default function LandingPage() {
             </div> */}
           </div>
           <p className="mt-8 text-center text-sm text-[#6B7280]">
-            © {new Date().getFullYear()} WritelyRewards. All rights reserved.
+            © {new Date().getFullYear()} WritelyRewarded. All rights reserved.
           </p>
         </div>
       </footer>

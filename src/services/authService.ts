@@ -1,4 +1,4 @@
-// authService.ts - Updated to use cookies
+// authService.ts - Updated with promo code validation
 import api from './api';
 import Cookies from 'js-cookie';
 
@@ -8,6 +8,7 @@ interface RegisterPayload {
   password: string;
   nickname?: string;
   referral_code?: string;
+  promo_code?: string; // Added promo code field
 }
 
 interface LoginPayload {
@@ -41,11 +42,23 @@ interface RegisterResponse {
     username: string;
     email: string;
   };
+  promo_bonus?: {
+    code: string;
+    amount: string;
+    message: string;
+  };
 }
 
 interface OtpVerifyResponse {
   message: string;
   success: boolean;
+}
+
+interface PromoCodeValidationResponse {
+  valid: boolean;
+  message: string;
+  bonus_amount?: string;
+  expires_at?: string;
 }
 
 const authService = {
@@ -113,6 +126,17 @@ const authService = {
     }
   },
   
+  // Add new method for promo code validation
+  validatePromoCode: async (code: string): Promise<PromoCodeValidationResponse> => {
+    try {
+      const response = await api.post('/auth/promo-code/validate/', { code });
+      return response.data;
+    } catch (error: any) {
+      console.error("Promo code validation error:", error.response?.data);
+      throw new Error(error.response?.data?.message || 'Failed to validate promo code.');
+    }
+  },
+  
   // Add new method for content writer promotion request
   requestWriterPromotion: async (): Promise<any> => {
     try {
@@ -132,5 +156,6 @@ export type {
   OtpVerifyPayload, 
   AuthResponse, 
   RegisterResponse, 
-  OtpVerifyResponse 
+  OtpVerifyResponse,
+  PromoCodeValidationResponse
 };

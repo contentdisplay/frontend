@@ -1,4 +1,3 @@
-// Updated UserProfilePage.tsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -423,34 +422,34 @@ export default function UserProfilePage() {
                   <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                     <DialogTrigger asChild>
                       <Button className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700">
-                        <Edit className="h-4 w-4 mr-2" />
+                        <Edit className="hсука-4 w-4 mr-2" />
                         Edit Profile
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[600px] bg-white dark:bg-gray-900">
+                    <DialogContent className="w-[95vw] sm:max-w-[600px] max-h-[90vh] overflow-y-auto bg-white dark:bg-gray-900 p-4 sm:p-6">
                       <DialogHeader>
-                        <DialogTitle className="text-2xl bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600">
+                        <DialogTitle className="text-xl sm:text-2xl bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-blue-600">
                           Edit Profile
                         </DialogTitle>
-                        <DialogDescription>
+                        <DialogDescription className="text-sm sm:text-base">
                           Update your profile information to complete your account
                         </DialogDescription>
                       </DialogHeader>
                       <Form {...profileForm}>
-                        <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-6">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4 sm:space-y-6">
+                          <div className="grid grid-cols-1 gap-4">
                             <FormField
                               control={profileForm.control}
                               name="first_name"
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel>First Name</FormLabel>
+                                  <FormLabel className="text-sm sm:text-base">First Name</FormLabel>
                                   <FormControl>
                                     <div className="relative">
                                       <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                                       <Input
                                         placeholder="Your first name"
-                                        className="pl-10 bg-white/50 dark:bg-gray-950/50"
+                                        className="pl-10 bg-white/50 dark:bg-gray-950/50 h-12 text-sm sm:text-base"
                                         {...field}
                                       />
                                     </div>
@@ -464,13 +463,13 @@ export default function UserProfilePage() {
                               name="last_name"
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel>Last Name</FormLabel>
+                                  <FormLabel className="text-sm sm:text-base">Last Name</FormLabel>
                                   <FormControl>
                                     <div className="relative">
                                       <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                                       <Input
                                         placeholder="Your last name"
-                                        className="pl-10 bg-white/50 dark:bg-gray-950/50"
+                                        className="pl-10 bg-white/50 dark:bg-gray-950/50 h-12 text-sm sm:text-base"
                                         {...field}
                                       />
                                     </div>
@@ -485,13 +484,13 @@ export default function UserProfilePage() {
                             name="phone_number"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Phone Number</FormLabel>
+                                <FormLabel className="text-sm sm:text-base">Phone Number</FormLabel>
                                 <FormControl>
                                   <div className="relative">
                                     <Phone className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                                     <Input
                                       placeholder="Your phone number"
-                                      className="pl-10 bg-white/50 dark:bg-gray-950/50"
+                                      className="pl-10 bg-white/50 dark:bg-gray-950/50 h-12 text-sm sm:text-base"
                                       {...field}
                                     />
                                   </div>
@@ -505,7 +504,7 @@ export default function UserProfilePage() {
                             name="address"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="flex items-center gap-1.5">
+                                <FormLabel className="flex items-center gap-1.5 text-sm sm:text-base">
                                   <MapPin className="h-4 w-4" />
                                   Address
                                 </FormLabel>
@@ -514,20 +513,20 @@ export default function UserProfilePage() {
                                     placeholder="Your address"
                                     {...field}
                                     rows={3}
-                                    className="resize-none bg-white/50 dark:bg-gray-950/50"
+                                    className="resize-none bg-white/50 dark:bg-gray-950/50 text-sm sm:text-base"
                                   />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>
                             )}
                           />
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 gap-4">
                             <FormField
                               control={profileForm.control}
                               name="age"
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="flex items-center gap-1.5">
+                                  <FormLabel className="flex items-center gap-1.5 text-sm sm:text-base">
                                     <Calendar className="h-4 w-4" />
                                     Age
                                   </FormLabel>
@@ -535,7 +534,7 @@ export default function UserProfilePage() {
                                     <Input
                                       placeholder="Your age"
                                       type="number"
-                                      className="bg-white/50 dark:bg-gray-950/50"
+                                      className="bg-white/50 dark:bg-gray-950/50 h-12 text-sm sm:text-base"
                                       {...field}
                                       value={field.value ?? ''}
                                     />
@@ -544,11 +543,10 @@ export default function UserProfilePage() {
                                 </FormItem>
                               )}
                             />
-                            {/* Fix for gender selection recursive error */}
                             <FormItem>
-                              <FormLabel>Gender</FormLabel>
+                              <FormLabel className="text-sm sm:text-base">Gender</FormLabel>
                               <select
-                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-white/50 dark:bg-gray-950/50"
+                                className="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-sm sm:text-base ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-white/50 dark:bg-gray-950/50"
                                 onChange={(e) => handleGenderChange(e.target.value)}
                                 value={profileForm.getValues('gender') || ''}
                               >
@@ -567,7 +565,7 @@ export default function UserProfilePage() {
                             name="website"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="flex items-center gap-1.5">
+                                <FormLabel className="flex items-center gap-1.5 text-sm sm:text-base">
                                   <Globe className="h-4 w-4" />
                                   Website
                                 </FormLabel>
@@ -576,7 +574,7 @@ export default function UserProfilePage() {
                                     <Globe className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                                     <Input
                                       placeholder="https://example.com"
-                                      className="pl-10 bg-white/50 dark:bg-gray-950/50"
+                                      className="pl-10 bg-white/50 dark:bg-gray-950/50 h-12 text-sm sm:text-base"
                                       {...field}
                                     />
                                   </div>
@@ -590,7 +588,7 @@ export default function UserProfilePage() {
                             name="bio"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="flex items-center gap-1.5">
+                                <FormLabel className="flex items-center gap-1.5 text-sm sm:text-base">
                                   <Info className="h-4 w-4" />
                                   Bio
                                 </FormLabel>
@@ -599,7 +597,7 @@ export default function UserProfilePage() {
                                     placeholder="Tell us about yourself"
                                     {...field}
                                     rows={4}
-                                    className="resize-none bg-white/50 dark:bg-gray-950/50"
+                                    className="resize-none bg-white/50 dark:bg-gray-950/50 text-sm sm:text-base"
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -611,7 +609,7 @@ export default function UserProfilePage() {
                             name="photo"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="flex items-center gap-1.5">
+                                <FormLabel className="flex items-center gap-1.5 text-sm sm:text-base">
                                   <Upload className="h-4 w-4" />
                                   Profile Photo
                                 </FormLabel>
@@ -628,7 +626,7 @@ export default function UserProfilePage() {
                                       type="button"
                                       variant="outline"
                                       onClick={triggerFileInput}
-                                      className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/50 dark:to-blue-900/50"
+                                      className="bg-gradient-to-r from-purple-100 to-blue-100 dark:from-purple-900/50 dark:to-blue-900/50 h-12 text-sm sm:text-base"
                                     >
                                       <Upload className="h-4 w-4 mr-2" />
                                       Choose Photo
@@ -647,18 +645,19 @@ export default function UserProfilePage() {
                               </FormItem>
                             )}
                           />
-                          <div className="flex justify-end gap-4">
+                          <div className="flex flex-col sm:flex-row sm:justify-end gap-4">
                             <Button
                               type="button"
                               variant="outline"
                               onClick={() => setIsDialogOpen(false)}
+                              className="h-12 text-sm sm:text-base"
                             >
                               Cancel
                             </Button>
                             <Button
                               type="submit"
                               disabled={isLoading}
-                              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 h-12 text-sm sm:text-base"
                             >
                               {isLoading ? (
                                 <span className="flex items-center gap-2">

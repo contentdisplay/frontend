@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from 'sonner';
+import { Search } from 'lucide-react';
 import api from '@/services/api';
 
 // Define interfaces for type safety
@@ -80,6 +81,13 @@ interface TransactionSummary {
   pending_payment_requests: number;
 }
 
+interface User {
+  id: number;
+  username: string;
+  full_name: string;
+  email: string;
+}
+
 export default function WalletQRManagement() {
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
   const [qrCodes, setQRCodes] = useState<QRCode[]>([]);
@@ -99,13 +107,67 @@ export default function WalletQRManagement() {
   const [file, setFile] = useState<File | null>(null);
   const [description, setDescription] = useState('');
   
-  // Transaction filters - Fixed default values to avoid empty string error
+  // Load Balance Dialog States - SIMPLIFIED APPROACH
+  const [showLoadBalanceDialog, setShowLoadBalanceDialog] = useState(false);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [loadAmount, setLoadAmount] = useState<string>('');
+  const [loadDescription, setLoadDescription] = useState<string>('');
+  const [loadTransactionType, setLoadTransactionType] = useState<'deposit' | 'reward'>('deposit');
+  const [userSearch, setUserSearch] = useState<string>('');
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  
+  // Transaction filters
   const [transactionType, setTransactionType] = useState<string>("all");
   const [transactionStatus, setTransactionStatus] = useState<string>("all");
   const [userFilter, setUserFilter] = useState<string>('');
   const [startDateStr, setStartDateStr] = useState<string>('');
   const [endDateStr, setEndDateStr] = useState<string>('');
   
+  // Ref to prevent multiple API calls
+  const loadUsersRef = useRef<boolean>(false);
+  
+  // COMPLETELY REWRITTEN: Load all users ONCE when dialog opens
+  const loadAllUsers = useCallback(async () => {
+    if (loadUsersRef.current) return; // Prevent multiple calls
+    
+    try {
+      loadUsersRef.current = true;
+      setIsLoadingUsers(true);
+      
+      const response = await api.get('/wallet/admin/users/');
+      const users = response.data.users || response.data || [];
+      setAllUsers(users);
+      setFilteredUsers(users);
+    } catch (error: any) {
+      console.error('Error loading users:', error);
+      toast.error("Failed to load users");
+      setAllUsers([]);
+      setFilteredUsers([]);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, []);
+
+  // SIMPLE CLIENT-SIDE FILTERING - No API calls on search
+  useEffect(() => {
+    if (!userSearch.trim()) {
+      setFilteredUsers(allUsers);
+      return;
+    }
+    
+    const searchLower = userSearch.toLowerCase();
+    const filtered = allUsers.filter(user => 
+      user.username.toLowerCase().includes(searchLower) ||
+      user.full_name.toLowerCase().includes(searchLower) ||
+      user.email.toLowerCase().includes(searchLower)
+    );
+    setFilteredUsers(filtered);
+  }, [userSearch, allUsers]);
+
+  // Load data on component mount
   useEffect(() => {
     loadPaymentRequests();
     loadQRCodes();
@@ -160,11 +222,9 @@ export default function WalletQRManagement() {
     try {
       setIsLoadingTransactions(true);
       
-      // Build query parameters for filters
       let url = '/wallet/admin/transactions/';
       const params = new URLSearchParams();
       
-      // Only add filters if they're not the "all" default value
       if (transactionType && transactionType !== "all") {
         params.append('transaction_type', transactionType);
       }
@@ -234,7 +294,6 @@ export default function WalletQRManagement() {
     try {
       setIsLoadingSummary(true);
       
-      // Build query parameters for date filters
       let url = '/wallet/admin/transaction-summary/';
       const params = new URLSearchParams();
       
@@ -253,7 +312,6 @@ export default function WalletQRManagement() {
       console.error('Error loading transaction summary:', error);
       toast.error("Failed to load transaction summary");
       
-      // Set default summary values to prevent UI errors
       setTransactionSummary({
         total_deposits: 0,
         total_withdrawals: 0,
@@ -271,6 +329,47 @@ export default function WalletQRManagement() {
       });
     } finally {
       setIsLoadingSummary(false);
+    }
+  };
+
+  // Load balance for user
+  const handleLoadBalance = async () => {
+    if (!selectedUserId || !loadAmount) {
+      toast.error("Please select a user and enter an amount");
+      return;
+    }
+
+    const amount = parseFloat(loadAmount);
+    if (isNaN(amount) || amount <= 0) {
+      toast.error("Please enter a valid amount");
+      return;
+    }
+
+    try {
+      setIsLoadingBalance(true);
+      
+      const response = await api.post('/wallet/admin/load-user-balance/', {
+        user_id: parseInt(selectedUserId),
+        amount: amount,
+        description: loadDescription || `Admin loaded ${loadTransactionType}: ₹${amount}`,
+        transaction_type: loadTransactionType
+      });
+
+      toast.success(response.data.detail);
+      
+      // Reset form and close dialog
+      handleCloseLoadBalanceDialog();
+      
+      // Reload data
+      loadAdminWallets();
+      loadAdminTransactions();
+      loadTransactionSummary();
+      
+    } catch (error: any) {
+      console.error('Error loading balance:', error);
+      toast.error(error.response?.data?.detail || "Failed to load balance");
+    } finally {
+      setIsLoadingBalance(false);
     }
   };
 
@@ -367,9 +466,39 @@ export default function WalletQRManagement() {
     return isNaN(num) ? '0.00' : num.toFixed(2);
   };
 
+  // SIMPLE DIALOG HANDLERS
+  const handleOpenLoadBalanceDialog = () => {
+    setShowLoadBalanceDialog(true);
+    loadAllUsers(); // Load users once when dialog opens
+  };
+
+  const handleCloseLoadBalanceDialog = () => {
+    setShowLoadBalanceDialog(false);
+    setSelectedUserId('');
+    setLoadAmount('');
+    setLoadDescription('');
+    setLoadTransactionType('deposit');
+    setUserSearch('');
+    setAllUsers([]);
+    setFilteredUsers([]);
+    loadUsersRef.current = false; // Reset the ref to allow future loads
+  };
+
+  const handleUserSelect = (userId: string) => {
+    setSelectedUserId(userId);
+  };
+
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold">Admin Wallet Management</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Admin Wallet Management</h2>
+        <Button 
+          onClick={handleOpenLoadBalanceDialog}
+          className="bg-green-600 hover:bg-green-700"
+        >
+          Load User Balance
+        </Button>
+      </div>
 
       <Tabs defaultValue="transactions" className="w-full">
         <TabsList className="grid grid-cols-4 w-[400px]">
@@ -386,73 +515,75 @@ export default function WalletQRManagement() {
               <CardTitle>Payment Requests</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Screenshot</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingRequests ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
-                        Loading requests...
-                      </TableCell>
+                      <TableHead>User</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Screenshot</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
-                  ) : paymentRequests.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
-                        No payment requests
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    paymentRequests.map((request) => (
-                      <TableRow key={request.id}>
-                        <TableCell>{request.user_name}</TableCell>
-                        <TableCell>{request.request_type}</TableCell>
-                        <TableCell>₹{formatAmount(request.amount)}</TableCell>
-                        <TableCell>
-                          {request.screenshot && (
-                            <a href={request.screenshot} target="_blank" rel="noopener noreferrer">
-                              <img src={request.screenshot} alt="Screenshot" className="w-16 h-16 object-cover" />
-                            </a>
-                          )}
-                        </TableCell>
-                        <TableCell>{new Date(request.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                            request.status === 'approved' ? 'bg-green-100 text-green-800' : 
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {request.status}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {request.status === 'pending' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedRequest(request);
-                                setShowActionDialog(true);
-                              }}
-                            >
-                              Review
-                            </Button>
-                          )}
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingRequests ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
+                          Loading requests...
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : paymentRequests.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
+                          No payment requests
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      paymentRequests.map((request) => (
+                        <TableRow key={request.id}>
+                          <TableCell>{request.user_name}</TableCell>
+                          <TableCell>{request.request_type}</TableCell>
+                          <TableCell>₹{formatAmount(request.amount)}</TableCell>
+                          <TableCell>
+                            {request.screenshot && (
+                              <a href={request.screenshot} target="_blank" rel="noopener noreferrer">
+                                <img src={request.screenshot} alt="Screenshot" className="w-16 h-16 object-cover" />
+                              </a>
+                            )}
+                          </TableCell>
+                          <TableCell>{new Date(request.created_at).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              request.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                              request.status === 'approved' ? 'bg-green-100 text-green-800' : 
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {request.status}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {request.status === 'pending' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedRequest(request);
+                                  setShowActionDialog(true);
+                                }}
+                              >
+                                Review
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -489,58 +620,60 @@ export default function WalletQRManagement() {
               </div>
 
               <div className="mt-6">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Image</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoadingQRCodes ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
-                          Loading QR codes...
-                        </TableCell>
+                        <TableHead>ID</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Image</TableHead>
+                        <TableHead>Created</TableHead>
+                        <TableHead>Actions</TableHead>
                       </TableRow>
-                    ) : qrCodes.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
-                          No QR codes available
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      qrCodes.map((qrCode) => (
-                        <TableRow key={qrCode.id}>
-                          <TableCell>{qrCode.id}</TableCell>
-                          <TableCell>{qrCode.description}</TableCell>
-                          <TableCell>
-                            <img src={qrCode.image} alt={qrCode.description} className="w-16 h-16 object-cover" />
-                          </TableCell>
-                          <TableCell>{new Date(qrCode.created_at).toLocaleDateString()}</TableCell>
-                          <TableCell>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => handleDelete(qrCode.id)}
-                            >
-                              Delete
-                            </Button>
+                    </TableHeader>
+                    <TableBody>
+                      {isLoadingQRCodes ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                            Loading QR codes...
                           </TableCell>
                         </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                      ) : qrCodes.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                            No QR codes available
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        qrCodes.map((qrCode) => (
+                          <TableRow key={qrCode.id}>
+                            <TableCell>{qrCode.id}</TableCell>
+                            <TableCell>{qrCode.description}</TableCell>
+                            <TableCell>
+                              <img src={qrCode.image} alt={qrCode.description} className="w-16 h-16 object-cover" />
+                            </TableCell>
+                            <TableCell>{new Date(qrCode.created_at).toLocaleDateString()}</TableCell>
+                            <TableCell>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(qrCode.id)}
+                              >
+                                Delete
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Transactions Tab (FIXED SelectItem empty value issue) */}
+        {/* Transactions Tab */}
         <TabsContent value="transactions">
           <Card>
             <CardHeader>
@@ -556,7 +689,6 @@ export default function WalletQRManagement() {
                         <SelectValue placeholder="All Types" />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* Fixed empty value issue by using "all" instead of "" */}
                         <SelectItem value="all">All Types</SelectItem>
                         <SelectItem value="deposit">Deposit</SelectItem>
                         <SelectItem value="withdraw">Withdraw</SelectItem>
@@ -575,7 +707,6 @@ export default function WalletQRManagement() {
                         <SelectValue placeholder="All Statuses" />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* Fixed empty value issue by using "all" instead of "" */}
                         <SelectItem value="all">All Statuses</SelectItem>
                         <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="approved">Approved</SelectItem>
@@ -586,22 +717,20 @@ export default function WalletQRManagement() {
                   </div>
                   
                   <div>
-                    <Label htmlFor="startDate">Start Date (YYYY-MM-DD)</Label>
+                    <Label htmlFor="startDate">Start Date</Label>
                     <Input
                       id="startDate"
-                      type="text"
-                      placeholder="YYYY-MM-DD"
+                      type="date"
                       value={startDateStr}
                       onChange={(e) => setStartDateStr(e.target.value)}
                     />
                   </div>
                   
                   <div>
-                    <Label htmlFor="endDate">End Date (YYYY-MM-DD)</Label>
+                    <Label htmlFor="endDate">End Date</Label>
                     <Input
                       id="endDate"
-                      type="text"
-                      placeholder="YYYY-MM-DD"
+                      type="date"
                       value={endDateStr}
                       onChange={(e) => setEndDateStr(e.target.value)}
                     />
@@ -618,69 +747,71 @@ export default function WalletQRManagement() {
                 </div>
               </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Details</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoadingTransactions ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                        Loading transactions...
-                      </TableCell>
+                      <TableHead>User</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Details</TableHead>
                     </TableRow>
-                  ) : transactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                        No transactions available
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    transactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell>{transaction.user_name || transaction.user}</TableCell>
-                        <TableCell>{transaction.transaction_type}</TableCell>
-                        <TableCell>₹{formatAmount(transaction.amount)}</TableCell>
-                        <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded text-xs font-medium ${
-                            transaction.status === 'approved' ? 'bg-green-100 text-green-800' : 
-                            transaction.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                            transaction.status === 'verified' ? 'bg-blue-100 text-blue-800' : 
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {transaction.status}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          {transaction.article_title && (
-                            <span className="text-sm text-gray-500">
-                              {transaction.article_title}
-                            </span>
-                          )}
-                          {transaction.description && (
-                            <span className="text-sm text-gray-500 block">
-                              {transaction.description}
-                            </span>
-                          )}
+                  </TableHeader>
+                  <TableBody>
+                    {isLoadingTransactions ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                          Loading transactions...
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : transactions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                          No transactions available
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      transactions.map((transaction) => (
+                        <TableRow key={transaction.id}>
+                          <TableCell>{transaction.user_name || transaction.user}</TableCell>
+                          <TableCell>{transaction.transaction_type}</TableCell>
+                          <TableCell>₹{formatAmount(transaction.amount)}</TableCell>
+                          <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${
+                              transaction.status === 'approved' ? 'bg-green-100 text-green-800' : 
+                              transaction.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                              transaction.status === 'verified' ? 'bg-blue-100 text-blue-800' : 
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {transaction.status}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            {transaction.article_title && (
+                              <span className="text-sm text-gray-500">
+                                {transaction.article_title}
+                              </span>
+                            )}
+                            {transaction.description && (
+                              <span className="text-sm text-gray-500 block">
+                                {transaction.description}
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Balance Calculator Tab with improved error handling */}
+        {/* Balance Calculator Tab */}
         <TabsContent value="calculator">
           <Card>
             <CardHeader>
@@ -697,7 +828,7 @@ export default function WalletQRManagement() {
                 </div>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                     <div className="p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
                       <p className="text-sm text-muted-foreground">Total Deposits</p>
                       <p className="text-xl font-bold">₹{transactionSummary.total_deposits.toFixed(2)}</p>
@@ -726,7 +857,7 @@ export default function WalletQRManagement() {
                       <p className="text-sm text-muted-foreground">Total Reward Points</p>
                       <p className="text-xl font-bold">₹{transactionSummary.total_reward_points.toFixed(2)}</p>
                     </div>
-                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg col-span-2 lg:col-span-1">
+                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/30 rounded-lg col-span-1 md:col-span-2 lg:col-span-1">
                       <p className="text-sm text-muted-foreground">Transaction Counts</p>
                       <div className="grid grid-cols-3 gap-2 mt-2">
                         <div>
@@ -761,63 +892,65 @@ export default function WalletQRManagement() {
                       />
                     </div>
                     
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>User</TableHead>
-                          <TableHead>Balance</TableHead>
-                          <TableHead>Reward Points</TableHead>
-                          <TableHead>Total Earnings</TableHead>
-                          <TableHead>Total Spending</TableHead>
-                          <TableHead>Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {isLoadingWallets ? (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
                           <TableRow>
-                            <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                              Loading wallets...
-                            </TableCell>
+                            <TableHead>User</TableHead>
+                            <TableHead>Balance</TableHead>
+                            <TableHead>Reward Points</TableHead>
+                            <TableHead>Total Earnings</TableHead>
+                            <TableHead>Total Spending</TableHead>
+                            <TableHead>Status</TableHead>
                           </TableRow>
-                        ) : wallets.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
-                              No wallets available
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          wallets.map((wallet) => (
-                            <TableRow key={wallet.id}>
-                              <TableCell>
-                                <div className="flex items-center space-x-2">
-                                  {wallet.profile_photo && (
-                                    <img 
-                                      src={wallet.profile_photo} 
-                                      alt={wallet.full_name || String(wallet.user)} 
-                                      className="w-8 h-8 rounded-full"
-                                    />
-                                  )}
-                                  <span>{wallet.full_name || wallet.user_name || String(wallet.user)}</span>
-                                </div>
-                              </TableCell>
-                              <TableCell>₹{formatAmount(wallet.balance)}</TableCell>
-                              <TableCell>₹{formatAmount(wallet.reward_points)}</TableCell>
-                              <TableCell>₹{formatAmount(wallet.total_earning)}</TableCell>
-                              <TableCell>₹{formatAmount(wallet.total_spending)}</TableCell>
-                              <TableCell>
-                                <span className={`px-2 py-1 rounded text-xs font-medium ${
-                                  wallet.status === 'approved' ? 'bg-green-100 text-green-800' : 
-                                  wallet.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
-                                  'bg-red-100 text-red-800'
-                                }`}>
-                                  {wallet.status}
-                                </span>
+                        </TableHeader>
+                        <TableBody>
+                          {isLoadingWallets ? (
+                            <TableRow>
+                              <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                                Loading wallets...
                               </TableCell>
                             </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
+                          ) : wallets.length === 0 ? (
+                            <TableRow>
+                              <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                                No wallets available
+                              </TableCell>
+                            </TableRow>
+                          ) : (
+                            wallets.map((wallet) => (
+                              <TableRow key={wallet.id}>
+                                <TableCell>
+                                  <div className="flex items-center space-x-2">
+                                    {wallet.profile_photo && (
+                                      <img 
+                                        src={wallet.profile_photo} 
+                                        alt={wallet.full_name || String(wallet.user)} 
+                                        className="w-8 h-8 rounded-full"
+                                      />
+                                    )}
+                                    <span>{wallet.full_name || wallet.user_name || String(wallet.user)}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>₹{formatAmount(wallet.balance)}</TableCell>
+                                <TableCell>₹{formatAmount(wallet.reward_points)}</TableCell>
+                                <TableCell>₹{formatAmount(wallet.total_earning)}</TableCell>
+                                <TableCell>₹{formatAmount(wallet.total_spending)}</TableCell>
+                                <TableCell>
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    wallet.status === 'approved' ? 'bg-green-100 text-green-800' : 
+                                    wallet.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                                    'bg-red-100 text-red-800'
+                                  }`}>
+                                    {wallet.status}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 </>
               )}
@@ -825,6 +958,120 @@ export default function WalletQRManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* COMPLETELY REWRITTEN: Simple Load Balance Dialog without focus traps */}
+      {showLoadBalanceDialog && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold">Load User Balance</h2>
+                <p className="text-sm text-muted-foreground">
+                  Add balance or reward points to a user's wallet.
+                </p>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="userSearch">Search Users</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="userSearch"
+                      placeholder="Search by username..."
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      className="pl-10"
+                      autoComplete="off"
+                    />
+                  </div>
+                  {isLoadingUsers && (
+                    <p className="text-sm text-muted-foreground mt-1">Loading users...</p>
+                  )}
+                </div>
+                
+                <div>
+                  <Label htmlFor="userSelect">Select User</Label>
+                  <Select 
+                    value={selectedUserId} 
+                    onValueChange={handleUserSelect}
+                  >
+                    <SelectTrigger id="userSelect">
+                      <SelectValue placeholder="Choose a user" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {filteredUsers.length === 0 ? (
+                        <div className="p-2 text-sm text-muted-foreground">
+                          {userSearch ? 'No users found' : 'Start typing to search users'}
+                        </div>
+                      ) : (
+                        filteredUsers.map((user) => (
+                          <SelectItem key={user.id} value={user.id.toString()}>
+                            {user.full_name} (@{user.username})
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="transactionTypeSelect">Transaction Type</Label>
+                  <Select 
+                    value={loadTransactionType} 
+                    onValueChange={(value: 'deposit' | 'reward') => setLoadTransactionType(value)}
+                  >
+                    <SelectTrigger id="transactionTypeSelect">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="deposit">Add to Balance</SelectItem>
+                      <SelectItem value="reward">Add to Reward Points</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="amountInput">Amount (₹)</Label>
+                  <Input
+                    id="amountInput"
+                    type="number"
+                    placeholder="Enter amount"
+                    value={loadAmount}
+                    onChange={(e) => setLoadAmount(e.target.value)}
+                    min="0"
+                    step="0.01"
+                    autoComplete="off"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="loadDescriptionInput">Description (Optional)</Label>
+                  <Textarea
+                    id="loadDescriptionInput"
+                    placeholder="Enter a description for this transaction"
+                    value={loadDescription}
+                    onChange={(e) => setLoadDescription(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex justify-end space-x-2 pt-4 border-t">
+                <Button variant="outline" onClick={handleCloseLoadBalanceDialog}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleLoadBalance} 
+                  disabled={!selectedUserId || !loadAmount || isLoadingBalance}
+                >
+                  {isLoadingBalance ? 'Loading...' : 'Load Balance'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Payment Request Action Dialog */}
       <Dialog open={showActionDialog} onOpenChange={setShowActionDialog}>
@@ -843,17 +1090,17 @@ export default function WalletQRManagement() {
                 <p><strong>Amount:</strong> ₹{formatAmount(selectedRequest.amount)}</p>
                 <p><strong>Screenshot:</strong> <a href={selectedRequest.screenshot} target="_blank" rel="noopener noreferrer">View</a></p>
                 {selectedRequest.qr_code && (
-                  <p>
-                    <strong>QR Code:</strong>
+                  <div>
+                    <p><strong>QR Code:</strong></p>
                     <img src={selectedRequest.qr_code.image} alt={selectedRequest.qr_code.description} className="w-32 h-32 object-contain mt-2" />
-                    <span>{selectedRequest.qr_code.description}</span>
-                  </p>
+                    <span className="block text-sm text-muted-foreground">{selectedRequest.qr_code.description}</span>
+                  </div>
                 )}
               </div>
               <div>
-                <Label htmlFor="adminNote">Admin Note</Label>
+                <Label htmlFor="adminNoteInput">Admin Note</Label>
                 <Textarea
-                  id="adminNote"
+                  id="adminNoteInput"
                   value={adminNote}
                   onChange={(e) => setAdminNote(e.target.value)}
                   placeholder="Enter any notes about this action"
