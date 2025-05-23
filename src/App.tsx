@@ -19,6 +19,7 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import AdminLoginPage from './pages/auth/AdminLoginPage';
+import VerifyEmailPage from "./pages/auth/VerifyEmailPage";
 
 // Role-specific Dashboards
 import UserDashboard from './pages/dashboard/UserDashboard';
@@ -75,6 +76,7 @@ const App = () => (
                 <Route path="login" element={<LoginPage />} />
                 <Route path="register" element={<RegisterPage />} />
                 <Route path="admin/login" element={<AdminLoginPage />} />
+                <Route path="/verify-email/:token" element={<VerifyEmailPage />} />
               </Route>
 
               {/* User Routes */}

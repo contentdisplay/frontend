@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -16,7 +16,6 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAuth } from "@/context/AuthContext";
 import { UserRole } from "@/types/auth";
-import OtpVerificationDialog from "@/components/auth/OtpVerificationDialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AtSign, KeyRound, User, Mail, Check } from "lucide-react";
 import { toast } from "sonner";
@@ -41,8 +40,7 @@ type FormValues = z.infer<typeof formSchema>;
 export default function RegisterPage() {
   const { register, requestWriterPromotion } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [showOtpDialog, setShowOtpDialog] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState("");
+  const navigate = useNavigate();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -58,7 +56,7 @@ export default function RegisterPage() {
   const onSubmit = async (values: FormValues) => {
     try {
       setIsLoading(true);
-      const email = await register(
+      await register(
         values.username,
         values.email,
         values.password,
@@ -66,19 +64,17 @@ export default function RegisterPage() {
         values.referralCode || undefined
       );
       
-      // If they selected 'writer' role, send the promotion request
       if (values.role === "writer") {
         try {
           await requestWriterPromotion();
           toast.success("Content writer promotion request submitted for approval.");
         } catch (error) {
-          // Just show a warning, but continue with registration
           toast.warning("Account created, but content writer request failed to submit.");
         }
       }
       
-      setRegisteredEmail(email);
-      setShowOtpDialog(true);
+      toast.success("Registration successful! Please check your email to verify your account.");
+      setTimeout(() => navigate("/login"), 3000); // Redirect to login after 3 seconds
     } catch (error: any) {
       console.error("Registration error:", error);
       if (error.code === "USER_ALREADY_EXISTS" || error.message.includes("already registered")) {
@@ -172,7 +168,7 @@ export default function RegisterPage() {
                     <FormItem>
                       <FormLabel>Referral Code (Optional)</FormLabel>
                       <FormControl>
-                        <div className="relative">
+                        <div className="relative">    
                           <AtSign className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                           <Input placeholder="Enter referral code" className="pl-10" {...field} />
                         </div>
@@ -187,37 +183,6 @@ export default function RegisterPage() {
                   name="role"
                   render={({ field }) => (
                     <FormItem className="space-y-3">
-                      {/* <FormLabel>Account Type</FormLabel> */}
-                      {/* <FormControl>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          className="flex flex-col space-y-1"
-                        >
-                          <FormItem className="flex items-center space-x-3 space-y-0 rounded-md border p-3">
-                            <FormControl>
-                              <RadioGroupItem value="user" />
-                            </FormControl>
-                            <FormLabel className="font-normal cursor-pointer flex-1">
-                              Normal User
-                              <p className="text-sm text-muted-foreground">
-                                Read and interact with content
-                              </p>
-                            </FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0 rounded-md border p-3">
-                            <FormControl>
-                              <RadioGroupItem value="writer" />
-                            </FormControl>
-                            <FormLabel className="font-normal cursor-pointer flex-1">
-                              Content Writer
-                              <p className="text-sm text-muted-foreground">
-                                Create and publish content (requires approval and ₹100 per publication)
-                              </p>
-                            </FormLabel>
-                          </FormItem>
-                        </RadioGroup>
-                      </FormControl> */}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -253,12 +218,6 @@ export default function RegisterPage() {
           </CardContent>
         </Card>
       </div>
-      
-      <OtpVerificationDialog 
-        isOpen={showOtpDialog}
-        onClose={() => setShowOtpDialog(false)}
-        email={registeredEmail}
-      />
     </div>
   );
 }

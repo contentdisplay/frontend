@@ -1,4 +1,3 @@
-// authService.ts - Updated with promo code validation
 import api from './api';
 import Cookies from 'js-cookie';
 
@@ -7,17 +6,12 @@ interface RegisterPayload {
   email: string;
   password: string;
   nickname?: string;
-  promo_code?: string; // Only promo code field now
+  promo_code?: string;
 }
 
 interface LoginPayload {
   email_or_username: string;
   password: string;
-}
-
-interface OtpVerifyPayload {
-  email: string;
-  otp: string;
 }
 
 interface AuthResponse {
@@ -48,16 +42,8 @@ interface RegisterResponse {
   };
 }
 
-interface OtpVerifyResponse {
+interface VerifyEmailResponse {
   message: string;
-  success: boolean;
-}
-
-interface PromoCodeValidationResponse {
-  valid: boolean;
-  message: string;
-  bonus_amount?: string;
-  expires_at?: string;
 }
 
 const authService = {
@@ -80,20 +66,24 @@ const authService = {
       throw new Error(errorMessage);
     }
   },
-  
-  verifyOtp: async (otpData: OtpVerifyPayload): Promise<OtpVerifyResponse> => {
-    const response = await api.post('/auth/otp/', otpData);
+
+verifyEmail: async (token: string): Promise<VerifyEmailResponse> => {
+  try {
+    const response = await api.get(`/auth/verify-email/${token}/`);
     return response.data;
-  },
+  } catch (error: any) {
+    console.error("Email verification error:", error.response?.data);
+    throw new Error(error.response?.data?.detail || 'Email verification failed.');
+  }
+},
   
   login: async (credentials: LoginPayload): Promise<AuthResponse> => {
     try {
       const response = await api.post('/auth/login/', credentials);
       const data = response.data;
       
-      // Set cookies with appropriate expiry
-      Cookies.set('access_token', data.access_token, { expires: 1/24 }); // 1 hour
-      Cookies.set('refresh_token', data.refresh_token, { expires: 7 }); // 7 days
+      Cookies.set('access_token', data.access_token, { expires: 1/24 });
+      Cookies.set('refresh_token', data.refresh_token, { expires: 7 });
       Cookies.set('user', JSON.stringify(data.user), { expires: 7 });
       
       return data;
@@ -125,7 +115,6 @@ const authService = {
     }
   },
   
-  // Promo code validation
   validatePromoCode: async (code: string): Promise<PromoCodeValidationResponse> => {
     try {
       const response = await api.post('/auth/promo-code/validate/', { code });
@@ -136,7 +125,6 @@ const authService = {
     }
   },
   
-  // Content writer promotion request
   requestWriterPromotion: async (): Promise<any> => {
     try {
       const response = await api.post('/auth/promotions/request/');
@@ -152,9 +140,7 @@ export default authService;
 export type { 
   RegisterPayload, 
   LoginPayload, 
-  OtpVerifyPayload, 
   AuthResponse, 
   RegisterResponse, 
-  OtpVerifyResponse,
-  PromoCodeValidationResponse
+  VerifyEmailResponse
 };

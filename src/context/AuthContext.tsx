@@ -2,8 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { AuthState, User, UserRole } from "@/types/auth";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import authService from "@/services/authService";
-import api from "@/services/api";
+import authService, { AuthResponse, RegisterResponse, VerifyEmailResponse } from "@/services/authService";
 import Cookies from 'js-cookie';
 
 interface AuthContextType extends AuthState {
@@ -12,6 +11,7 @@ interface AuthContextType extends AuthState {
   logout: () => void;
   adminLogin: (email: string, password: string) => Promise<void>;
   requestWriterPromotion: () => Promise<void>;
+  verifyEmail: (token: string) => Promise<VerifyEmailResponse>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email,
         password,
         nickname: username,
-        referral_code: referralCode
+        promo_code: referralCode
       });
       
       toast.success("Registration successful! Please verify your email.");
@@ -216,6 +216,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const verifyEmail = async (token: string): Promise<VerifyEmailResponse> => {
+    try {
+      const response = await authService.verifyEmail(token);
+      toast.success(response.message);
+      return response;
+    } catch (error: any) {
+      console.error("Email verification error:", error);
+      toast.error(error.message || "Email verification failed.");
+      throw error;
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -225,6 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         adminLogin,
         requestWriterPromotion,
+        verifyEmail,
       }}
     >
       {children}
