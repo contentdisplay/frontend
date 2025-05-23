@@ -127,19 +127,19 @@ export default function LandingPage() {
     {
       name: "Aman Yadav",
       role: "Content Writer",
-      image: "public/landing/46.jpg",
+      image: "landing/48.jpg",
       quote: "I've read various articles and the options just keeps coming. This platform has given me great articles for my content creation. And i can become a article publisher myself!"
     },
     {
       name: "Abhishek Chaudhary",
       role: "Student Reader",
-      image: "public/landing/46.jpg",
+      image: "landing/47.jpg",
       quote: "WritelyRewards helps me earn while I research for my studies. It's like getting paid to learn!"
     },
     {
       name: "Ramkrishna Paudel",
       role: "Professional Blogger",
-      image: "public/landing/46.jpg",
+      image: "landing/46.jpg",
       quote: "I've doubled my audience since joining. The platform attracts engaged readers who actually value good content."
     }
   ];
@@ -151,21 +151,21 @@ export default function LandingPage() {
       specialty: "Technology Writer",
       earnings: "Rs.1000 earned",
       articles: "15 published articles",
-      image: "public/landing/46.jpg"
+      image: "landing/49.jpg"
     },
     {
       name: "Priya Sharma",
       specialty: "Financial Advisor",
       earnings: "2Rs.100 earned",
       articles: "22 published articles",
-      image: "public/landing/46.jpg"
+      image: "landing/50.jpg"
     },
     {
       name: "Marcus Johnson",
       specialty: "Health & Wellness",
       earnings: "Rs.950 earned",
       articles: "11 published articles",
-      image: "public/landing/46.jpg"
+      image: "landing/51.jpg"
     }
   ];
 
