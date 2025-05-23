@@ -31,8 +31,20 @@ export interface AnalyticsData {
   user_article_ratio: Array<{ month: string; articles: number; users: number; ratio: number }>;
 }
 
+export interface DashboardStats {
+  total_users: number;
+  active_users: number;
+  content_writers: number;
+  normal_users: number;
+  pending_promotions: number;
+}
+
 export const fetchAnalytics = async (days: number = 30): Promise<AnalyticsData> => {
-  // Use the endpoint exactly as it appears in your dashboard/urls.py
   const response = await api.get(`/dashboard/admin/dashboard/analytics/?days=${days}`);
+  return response.data;
+};
+
+export const fetchDashboardStats = async (): Promise<DashboardStats> => {
+  const response = await api.get('/auth/admin/dashboard/');
   return response.data;
 };

@@ -7,24 +7,15 @@ import { Users, FileText, Bell, TrendingUp, Wallet, Award } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import api from '@/services/api';
-import { fetchAnalytics, AnalyticsData } from '@/services/admin/adminDashboardService';
-
-interface Stats {
-  users: number;
-  articles: number;
-  pendingArticles: number;
-  notifications: number;
-  pendingPromotions: number;
-}
+import { fetchAnalytics, fetchDashboardStats, AnalyticsData, DashboardStats } from '@/services/admin/adminDashboardService';
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<Stats>({
-    users: 0,
-    articles: 0,
-    pendingArticles: 0,
-    notifications: 0,
-    pendingPromotions: 0,
+  const [stats, setStats] = useState<DashboardStats>({
+    total_users: 0,
+    active_users: 0,
+    content_writers: 0,
+    normal_users: 0,
+    pending_promotions: 0,
   });
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [timeRange, setTimeRange] = useState<number>(30);
@@ -38,34 +29,18 @@ export default function AdminDashboard() {
   const fetchStats = async () => {
     try {
       setLoading(true);
-      
-      // Use the exact endpoints as defined in your Django url configs
-      const [usersRes, articlesRes, pendingArticlesRes, notificationsRes, promotionsRes] = await Promise.all([
-        api.get('/auth/admin/users/'),
-        api.get('/articles/'),
-        api.get('/articles/admin/articles/pending/'),
-        api.get('/notification/alert/'),
-        api.get('/auth/promotions/pending/'),
-      ]);
-
-      setStats({
-        users: usersRes.data.length,
-        articles: articlesRes.data.length,
-        pendingArticles: pendingArticlesRes.data.length,
-        notifications: notificationsRes.data.length,
-        pendingPromotions: promotionsRes.data.length,
-      });
+      const statsData = await fetchDashboardStats();
+      setStats(statsData);
     } catch (err: any) {
       console.error('Failed to fetch stats:', err);
       toast.error('Failed to load dashboard stats');
-      
       // Set fake data for development purposes if API fails
       setStats({
-        users: 120,
-        articles: 45,
-        pendingArticles: 8,
-        notifications: 15,
-        pendingPromotions: 3,
+        total_users: 120,
+        active_users: 100,
+        content_writers: 20,
+        normal_users: 80,
+        pending_promotions: 3,
       });
     } finally {
       setLoading(false);
@@ -79,7 +54,6 @@ export default function AdminDashboard() {
     } catch (err: any) {
       console.error('Failed to fetch analytics:', err);
       toast.error('Failed to load analytics data');
-      
       // Set fake data for development purposes if API fails
       setAnalytics({
         user_growth: Array.from({ length: 30 }, (_, i) => ({
@@ -128,18 +102,18 @@ export default function AdminDashboard() {
     );
   }
 
-  // Prepare data for a pie chart of article distribution
-  const articleDistributionData = [
-    { name: 'Published', value: stats.articles - stats.pendingArticles },
-    { name: 'Pending', value: stats.pendingArticles },
+  // Prepare data for a pie chart of user role distribution
+  const userRoleDistributionData = [
+    { name: 'Content Writers', value: stats.content_writers },
+    { name: 'Normal Users', value: stats.normal_users },
   ];
 
   const statCards = [
-    { title: 'Total Users', value: stats.users, icon: Users, color: 'bg-blue-600' },
-    { title: 'Total Articles', value: stats.articles, icon: FileText, color: 'bg-green-600' },
-    { title: 'Pending Articles', value: stats.pendingArticles, icon: FileText, color: 'bg-yellow-600' },
-    { title: 'Notifications', value: stats.notifications, icon: Bell, color: 'bg-purple-600' },
-    { title: 'Pending Promotions', value: stats.pendingPromotions, icon: Award, color: 'bg-red-600' },
+    { title: 'Total Users', value: stats.total_users, icon: Users, color: 'bg-blue-600' },
+    { title: 'Active Users', value: stats.active_users, icon: Users, color: 'bg-green-600' },
+    { title: 'Content Writers', value: stats.content_writers, icon: FileText, color: 'bg-yellow-600' },
+    { title: 'Normal Users', value: stats.normal_users, icon: Users, color: 'bg-purple-600' },
+    { title: 'Pending Promotions', value: stats.pending_promotions, icon: Award, color: 'bg-red-600' },
   ];
 
   return (
@@ -277,16 +251,16 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
 
-            {/* Article Distribution (Pie Chart) */}
+            {/* User Role Distribution (Pie Chart) */}
             <Card>
               <CardHeader>
-                <CardTitle>Article Status Distribution</CardTitle>
+                <CardTitle>User Role Distribution</CardTitle>
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={articleDistributionData}
+                      data={userRoleDistributionData}
                       cx="50%"
                       cy="50%"
                       labelLine={false}
@@ -295,7 +269,7 @@ export default function AdminDashboard() {
                       fill="#8884d8"
                       dataKey="value"
                     >
-                      {articleDistributionData.map((entry, index) => (
+                      {userRoleDistributionData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
