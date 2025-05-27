@@ -69,52 +69,52 @@ export interface GiftPointsRequest {
 const articleService = {
   getPublishedArticles: async (page = 1, pageSize = 10): Promise<{results: Article[], count: number}> => {
     try {
-      console.log('Calling getPublishedArticles API endpoint');
-      const response = await api.get('/articles/', {
-        params: {
-          page,
-          page_size: pageSize
+        console.log('Calling getPublishedArticles API endpoint');
+        const response = await api.get('/articles/', {
+            params: {
+                page,
+                page_size: pageSize
+            }
+        });
+        console.log('API Response from getPublishedArticles:', response);
+        
+        let articles: Article[] = [];
+        let count = 0;
+        
+        if (Array.isArray(response.data)) {
+            articles = response.data;
+            count = response.data.length;
+        } else if (response.data && typeof response.data === 'object') {
+            if (Array.isArray(response.data.results)) {
+                articles = response.data.results;
+                count = response.data.count || articles.length;
+            } else if (Array.isArray(response.data.data)) {
+                articles = response.data.data;
+                count = response.data.count || articles.length;
+            }
         }
-      });
-      console.log('API Response from getPublishedArticles:', response);
-      
-      let articles: Article[] = [];
-      let count = 0;
-      
-      if (Array.isArray(response.data)) {
-        articles = response.data;
-        count = response.data.length;
-      } else if (response.data && typeof response.data === 'object') {
-        if (Array.isArray(response.data.results)) {
-          articles = response.data.results;
-          count = response.data.count || articles.length;
-        } else if (Array.isArray(response.data.data)) {
-          articles = response.data.data;
-          count = response.data.count || articles.length;
-        }
-      }
-      
-      return {
-        results: articles.map(article => ({
-          ...article,
-          likes_count: article.total_likes || 0,
-          bookmarks_count: article.total_bookmarks || 0,
-          is_bookmarked: article.is_bookmarked || false,
-          is_liked: article.is_liked || false,
-          tags: article.tags || [],
-          reward: article.reward || 0,
-          word_count: article.word_count || 0,
-          is_published: article.status === 'published',
-          is_pending_publish: article.status === 'pending',
-          content: article.content || ''
-        })),
-        count
-      };
+        
+        return {
+            results: articles.map(article => ({
+                ...article,
+                likes_count: article.total_likes || 0,
+                bookmarks_count: article.total_bookmarks || 0,
+                is_bookmarked: article.is_bookmarked || false,
+                is_liked: article.is_liked || false,
+                tags: article.tags || [],
+                reward: article.reward || 0,
+                word_count: article.word_count || 0,
+                is_published: article.status === 'published',
+                is_pending_publish: article.status === 'pending',
+                content: article.content || ''
+            })),
+            count
+        };
     } catch (error) {
-      console.error('Failed to fetch published articles:', error);
-      return { results: [], count: 0 };
+        console.error('Failed to fetch published articles:', error);
+        return { results: [], count: 0 };
     }
-  },
+},
 
   getTrendingArticles: async (): Promise<Article[]> => {
     try {

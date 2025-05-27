@@ -15,6 +15,21 @@ export interface UserProfile {
   website: string | null;
   bio: string | null;
   photo: string | null | File;
+  referral_code: string;
+  referral_count: number;
+  referred_by_username: string | null;
+}
+
+export interface ReferralStats {
+  referral_code: string;
+  total_referrals: number;
+  total_rewards_earned: number;
+  recent_referrals: Array<{
+    username: string;
+    email: string;
+    date_joined: string;
+    is_verified: boolean;
+  }>;
 }
 
 const profileService = {
@@ -56,6 +71,16 @@ const profileService = {
     } catch (error: any) {
       console.error('Failed to update profile', error);
       throw new Error(error.response?.data?.detail || 'Failed to update profile information');
+    }
+  },
+
+  getReferralStats: async (): Promise<ReferralStats> => {
+    try {
+      const response = await api.get('/auth/referral-stats/');
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to get referral stats', error);
+      throw new Error(error.response?.data?.detail || 'Failed to get referral statistics');
     }
   },
 

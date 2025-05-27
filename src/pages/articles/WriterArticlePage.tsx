@@ -207,36 +207,39 @@ export default function WriterArticlesPage() {
   const loadArticles = async () => {
     setIsLoading(true);
     try {
-      const response = await articleService.getPublishedArticles();
-      const articlesData = Array.isArray(response.results) ? response.results : [];
-      
-      setArticles(articlesData);
-      
-      const reads = articlesData.reduce((sum, article) => sum + (article.total_reads || 0), 0);
-      const likes = articlesData.reduce((sum, article) => sum + (article.likes_count || 0), 0);
-      
-      const statsObj = {
-        total: articlesData.length,
-        published: articlesData.filter(a => a.status === 'published').length,
-        draft: articlesData.filter(a => a.status === 'draft').length,
-        pending: articlesData.filter(a => a.status === 'pending').length,
-        reads,
-        likes,
-        earnings: 0
-      };
-      
-      loadEarningsData(statsObj);
+        const response = await articleService.getPublishedArticles();
+        const articlesData = Array.isArray(response.results) ? response.results : [];
+        
+        // Filter articles by the current user's ID
+        const userArticles = articlesData.filter(article => article.author === parseInt(user?.id || '0'));
+        
+        setArticles(userArticles);
+        
+        const reads = userArticles.reduce((sum, article) => sum + (article.total_reads || 0), 0);
+        const likes = userArticles.reduce((sum, article) => sum + (article.likes_count || 0), 0);
+        
+        const statsObj = {
+            total: userArticles.length,
+            published: userArticles.filter(a => a.status === 'published').length,
+            draft: userArticles.filter(a => a.status === 'draft').length,
+            pending: userArticles.filter(a => a.status === 'pending').length,
+            reads,
+            likes,
+            earnings: 0
+        };
+        
+        loadEarningsData(statsObj);
     } catch (error) {
-      console.error('Error loading articles:', error);
-      toast.error('Failed to load your articles');
-      setArticles([]);
-      setStats({
-        total: 0, published: 0, draft: 0, pending: 0, reads: 0, likes: 0, earnings: 0
-      });
+        console.error('Error loading articles:', error);
+        toast.error('Failed to load your articles');
+        setArticles([]);
+        setStats({
+            total: 0, published: 0, draft: 0, pending: 0, reads: 0, likes: 0, earnings: 0
+        });
     } finally {
-      setIsLoading(false);
+        setIsLoading(false);
     }
-  };
+};
   
   const loadEarningsData = async (statsObj) => {
     try {

@@ -64,6 +64,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
+import ReferralSection from '@/components/profile/ReferralSection';
 
 const profileFormSchema = z.object({
   first_name: z
@@ -772,7 +773,15 @@ export default function UserProfilePage() {
             </div>
           )}
         </CardContent>
-        
+        {userProfile && (
+      <div className="mt-6">
+        <ReferralSection 
+          referralCode={userProfile.referral_code}
+          referralCount={userProfile.referral_count}
+          referredBy={userProfile.referred_by_username}
+        />
+      </div>
+    )}
         {/* Transactions section */}
         <Separator className="my-2" />
         <CardHeader className="pb-0">

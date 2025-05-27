@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Article } from '@/services/articleService';
-import { Heart, Bookmark, Clock, User, Tag, Award, Edit, Send, AlertTriangle } from 'lucide-react';
+import { Heart, Bookmark, Clock, User, Tag, Award, Edit, Send, AlertTriangle, Star } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -148,6 +148,16 @@ export default function ArticleCard({
     }
   };
 
+  // Handle Earn Now button click
+  const handleEarnNow = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (onClick) {
+      onClick();
+    }
+  };
+
   const getStatusBadge = () => {
     if (!isOwnArticle) return null;
     
@@ -240,6 +250,28 @@ export default function ArticleCard({
         </span>
 
         <div className="flex gap-1">
+          {/* Earn Now Button - Show for published articles that are not own articles */}
+          {!isOwnArticle && article.is_published && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-xs px-3 py-1 h-8"
+                    onClick={handleEarnNow}
+                  >
+                    <Star className="h-3 w-3 mr-1" />
+                    Earn Now
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Read & Earn {article.collectable_reward_points || 50} Points</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
           {isOwnArticle && !article.is_published && !article.is_pending_publish && article.status !== 'rejected' && (
             <TooltipProvider>
               <Tooltip>
@@ -374,6 +406,19 @@ export default function ArticleCard({
               </div>
 
               <div className="flex gap-1">
+                {/* Earn Now Button for horizontal variant */}
+                {!isOwnArticle && article.is_published && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-xs px-3 py-1 h-8 mr-2"
+                    onClick={handleEarnNow}
+                  >
+                    <Star className="h-3 w-3 mr-1" />
+                    Earn Now
+                  </Button>
+                )}
+
                 {isOwnArticle && !article.is_published && !article.is_pending_publish && article.status !== 'rejected' && (
                   <Button
                     variant="outline"
@@ -459,6 +504,19 @@ export default function ArticleCard({
               </span>
 
               <div className="flex gap-1">
+                {/* Earn Now Button for compact variant */}
+                {!isOwnArticle && article.is_published && (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-xs px-2 py-1 h-6"
+                    onClick={handleEarnNow}
+                  >
+                    <Star className="h-2 w-2 mr-1" />
+                    Earn
+                  </Button>
+                )}
+
                 {isOwnArticle && !article.is_published && !article.is_pending_publish && article.status !== 'rejected' && (
                   <Button
                     variant="outline"

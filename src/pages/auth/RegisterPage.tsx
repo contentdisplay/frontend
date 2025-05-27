@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -17,10 +17,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useAuth } from "@/context/AuthContext";
 import { UserRole } from "@/types/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { AtSign, KeyRound, User, Mail, Check } from "lucide-react";
+import { AtSign, KeyRound, User, Mail, Check, Gift } from "lucide-react";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import GoogleSignIn from "@/components/auth/GoogleSignIn";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const formSchema = z.object({
   username: z
@@ -41,8 +42,10 @@ type FormValues = z.infer<typeof formSchema>;
 
 export default function RegisterPage() {
   const { register, requestWriterPromotion, googleSignIn } = useAuth();
+  const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [referralBonusInfo, setReferralBonusInfo] = useState<any>(null);
   const navigate = useNavigate();
 
   const form = useForm<FormValues>({
@@ -56,16 +59,30 @@ export default function RegisterPage() {
     },
   });
 
+  // Pre-fill referral code from URL parameter
+  useEffect(() => {
+    const refCode = searchParams.get('ref');
+    if (refCode) {
+      form.setValue('referralCode', refCode);
+      toast.info(`Referral code "${refCode}" has been applied!`);
+    }
+  }, [searchParams, form]);
+
   const onSubmit = async (values: FormValues) => {
     try {
       setIsLoading(true);
-      await register(
+      const result = await register(
         values.username,
         values.email,
         values.password,
         values.role as UserRole,
         values.referralCode || undefined
       );
+      
+      // Check if there's referral bonus information
+      if (result && result.referral_bonus) {
+        setReferralBonusInfo(result.referral_bonus);
+      }
       
       if (values.role === "writer") {
         try {
@@ -76,7 +93,12 @@ export default function RegisterPage() {
         }
       }
       
-      toast.success("Registration successful! Please check your email to verify your account.");
+      let successMessage = "Registration successful! Please check your email to verify your account.";
+      if (result && result.referral_bonus) {
+        successMessage += ` Your referrer ${result.referral_bonus.referrer} has been rewarded!`;
+      }
+      
+      toast.success(successMessage);
       setTimeout(() => navigate("/login"), 3000); // Redirect to login after 3 seconds
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -131,6 +153,16 @@ export default function RegisterPage() {
           </CardHeader>
           
           <CardContent className="space-y-4">
+            {/* Referral Bonus Alert */}
+            {referralBonusInfo && (
+              <Alert className="bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800/50">
+                <Gift className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-800 dark:text-green-300">
+                  {referralBonusInfo.message}
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Google Sign-In Button */}
             <div className="w-full">
               <GoogleSignIn 
@@ -227,18 +259,29 @@ export default function RegisterPage() {
                   name="referralCode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Referral Code (Optional)</FormLabel>
+                      <FormLabel className="flex items-center gap-2">
+                        <AtSign className="h-4 w-4" />
+                        Referral Code (Optional)
+                        {field.value && (
+                          <Gift className="h-4 w-4 text-green-600" />
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <div className="relative">    
                           <AtSign className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
                           <Input 
                             placeholder="Enter referral code" 
-                            className="pl-10" 
+                            className={`pl-10 ${field.value ? 'border-green-300 bg-green-50 dark:bg-green-900/20' : ''}`}
                             {...field} 
                             disabled={isLoading || isGoogleLoading}
                           />
                         </div>
                       </FormControl>
+                      {field.value && (
+                        <p className="text-sm text-green-600 dark:text-green-400">
+                          Your referrer will earn 200 reward points when you complete registration!
+                        </p>
+                      )}
                       <FormMessage />
                     </FormItem>
                   )}

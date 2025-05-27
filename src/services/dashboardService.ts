@@ -10,6 +10,12 @@ export interface Offer {
   redemption_code?: string;
   expires_at: string;
   is_active: boolean;
+  is_claimed_today?: boolean; // If ANY offer was claimed today
+  claimed_offer_today?: {     // Details of the offer claimed today
+    id: string;
+    title: string;
+    reward_amount: number;
+  } | null;
 }
 
 export interface Promotion {
@@ -44,6 +50,13 @@ export interface TopTransaction {
   amount_spent: number;
   amount_withdrawn: number;
   notes: string;
+}
+
+export interface ClaimResponse {
+  message: string;
+  reward_amount: number;
+  new_balance: number;
+  offer_title: string;
 }
 
 const dashboardService = {
@@ -86,6 +99,19 @@ const dashboardService = {
       return [];
     }
   },
+
+  // In dashboardService.ts, update the claimOffer method:
+claimOffer: async (offerId: string): Promise<ClaimResponse> => {
+  try {
+    const response = await api.post(`/dashboard/offers/${offerId}/claim/`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.data?.error) {
+      throw new Error(error.response.data.error);
+    }
+    throw new Error('Failed to claim offer. Please try again.');
+  }
+},
 };
 
 export default dashboardService;
