@@ -12,6 +12,7 @@ interface AuthContextType extends AuthState {
   adminLogin: (email: string, password: string) => Promise<void>;
   requestWriterPromotion: () => Promise<void>;
   verifyEmail: (token: string) => Promise<VerifyEmailResponse>;
+  googleSignIn: (credential: string) => Promise<void>; // NEW: Google Sign-In method
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -191,6 +192,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // NEW: Google Sign-In method
+  const googleSignIn = async (credential: string) => {
+    try {
+      const response = await authService.googleSignIn(credential);
+      
+      // Determine user role from response (same logic as regular login)
+      const userRole = response.user.groups.includes('Content Writer') || 
+                      response.user.role === 'writer' ? 'writer' : 
+                      (response.user.is_staff || response.user.is_superuser ? 'admin' : 'user');
+      
+      const userData = {
+        id: response.user.id.toString(),
+        name: response.user.username,
+        email: response.user.email,
+        role: userRole as UserRole,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${response.user.email}`,
+      };
+      
+      // Store user data in a cookie
+      Cookies.set('user', JSON.stringify(userData), { expires: 7 });
+      
+      setAuthState({
+        user: userData,
+        token: response.access_token,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+      
+      toast.success(`Welcome, ${response.user.username}!`);
+      
+      // Redirect based on role (same logic as regular login)
+      if (userRole === 'admin') {
+        navigate("/admin/dashboard");
+      } else if (userRole === 'writer') {
+        navigate("/writer/dashboard");
+      } else {
+        navigate("/dashboard");
+      }
+    } catch (error: any) {
+      console.error("Google Sign-In error:", error);
+      toast.error(error.message || "Google Sign-In failed. Please try again.");
+      throw error;
+    }
+  };
+
   const logout = () => {
     authService.logout();
     
@@ -238,6 +284,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         adminLogin,
         requestWriterPromotion,
         verifyEmail,
+        googleSignIn, // NEW: Add googleSignIn to the context value
       }}
     >
       {children}

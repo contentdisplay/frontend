@@ -1,3 +1,4 @@
+// services/authService.ts
 import api from './api';
 import Cookies from 'js-cookie';
 
@@ -46,6 +47,44 @@ interface VerifyEmailResponse {
   message: string;
 }
 
+interface PromoCodeValidationResponse {
+  valid: boolean;
+  message: string;
+}
+
+interface GoogleAuthResponse extends AuthResponse {
+  message: string;
+}
+
+// Helper function to decode JWT token and get user info
+const decodeJWT = (token: string) => {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch (error) {
+    console.error('Error decoding JWT:', error);
+    return null;
+  }
+};
+
+// Helper function to get access token from Google credential
+const getGoogleAccessToken = async (credential: string): Promise<string> => {
+  try {
+    // For Google Identity Services, we need to exchange the credential for an access token
+    // The credential is actually a JWT token from Google, we'll send it directly to our backend
+    return credential;
+  } catch (error) {
+    throw new Error('Failed to get Google access token');
+  }
+};
+  
 const authService = {
   register: async (userData: RegisterPayload): Promise<RegisterResponse> => {
     const registrationData = {
@@ -67,15 +106,15 @@ const authService = {
     }
   },
 
-verifyEmail: async (token: string): Promise<VerifyEmailResponse> => {
-  try {
-    const response = await api.get(`/auth/verify-email/${token}/`);
-    return response.data;
-  } catch (error: any) {
-    console.error("Email verification error:", error.response?.data);
-    throw new Error(error.response?.data?.detail || 'Email verification failed.');
-  }
-},
+  verifyEmail: async (token: string): Promise<VerifyEmailResponse> => {
+    try {
+      const response = await api.get(`/auth/verify-email/${token}/`);
+      return response.data;
+    } catch (error: any) {
+      console.error("Email verification error:", error.response?.data);
+      throw new Error(error.response?.data?.detail || 'Email verification failed.');
+    }
+  },
   
   login: async (credentials: LoginPayload): Promise<AuthResponse> => {
     try {
@@ -93,6 +132,34 @@ verifyEmail: async (token: string): Promise<VerifyEmailResponse> => {
       throw new Error(errorMessage);
     }
   },
+
+  // NEW: Google Sign-In method
+  googleSignIn: async (credential: string): Promise<GoogleAuthResponse> => {
+    try {
+      console.log("Starting Google Sign-In process...");
+      
+      // Send the credential directly to our backend
+      const response = await api.post('/auth/google/', {
+        access_token: credential
+      });
+      
+      const data = response.data;
+      
+      // Store tokens and user data same as regular login
+      Cookies.set('access_token', data.access_token, { expires: 1/24 });
+      Cookies.set('refresh_token', data.refresh_token, { expires: 7 });
+      Cookies.set('user', JSON.stringify(data.user), { expires: 7 });
+      
+      console.log("Google Sign-In successful:", data);
+      return data;
+    } catch (error: any) {
+      console.error("Google Sign-In error:", error.response?.data);
+      const errorMessage = error.response?.data?.error || 
+        error.response?.data?.detail || 
+        'Google Sign-In failed. Please try again.';
+      throw new Error(errorMessage);
+    }
+  },
   
   logout: async (): Promise<void> => {
     try {
@@ -103,6 +170,15 @@ verifyEmail: async (token: string): Promise<VerifyEmailResponse> => {
     Cookies.remove('access_token');
     Cookies.remove('refresh_token');
     Cookies.remove('user');
+    
+    // Sign out from Google if available
+    if (window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.disableAutoSelect();
+      } catch (error) {
+        console.log('Google sign out error:', error);
+      }
+    }
   },
   
   getCurrentUser: () => {
@@ -133,7 +209,8 @@ verifyEmail: async (token: string): Promise<VerifyEmailResponse> => {
       console.error("Promotion request error:", error.response?.data);
       throw new Error(error.response?.data?.detail || 'Failed to request promotion to content writer.');
     }
-  }
+  },
+  
 };
 
 export default authService;
@@ -142,5 +219,6 @@ export type {
   LoginPayload, 
   AuthResponse, 
   RegisterResponse, 
-  VerifyEmailResponse
+  VerifyEmailResponse,
+  GoogleAuthResponse
 };

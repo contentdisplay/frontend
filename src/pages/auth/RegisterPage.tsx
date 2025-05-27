@@ -19,6 +19,8 @@ import { UserRole } from "@/types/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AtSign, KeyRound, User, Mail, Check } from "lucide-react";
 import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
+import GoogleSignIn from "@/components/auth/GoogleSignIn";
 
 const formSchema = z.object({
   username: z
@@ -38,8 +40,9 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 export default function RegisterPage() {
-  const { register, requestWriterPromotion } = useAuth();
+  const { register, requestWriterPromotion, googleSignIn } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const navigate = useNavigate();
 
   const form = useForm<FormValues>({
@@ -87,6 +90,26 @@ export default function RegisterPage() {
     }
   };
 
+  const handleGoogleSuccess = async (credential: string) => {
+    try {
+      setIsGoogleLoading(true);
+      await googleSignIn(credential);
+      // Note: For Google Sign-In, the user is automatically verified
+      // so they'll be redirected to dashboard by the auth context
+    } catch (error: any) {
+      console.error("Google Sign-In error:", error);
+      toast.error(error.message || "Google Sign-In failed. Please try again.");
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleError = (error: any) => {
+    console.error("Google Sign-In error:", error);
+    toast.error("Google Sign-In failed. Please try again.");
+    setIsGoogleLoading(false);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-lg space-y-8">
@@ -107,7 +130,28 @@ export default function RegisterPage() {
             </CardDescription>
           </CardHeader>
           
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* Google Sign-In Button */}
+            <div className="w-full">
+              <GoogleSignIn 
+                onSuccess={handleGoogleSuccess}
+                onError={handleGoogleError}
+                text="signup_with"
+                disabled={isGoogleLoading || isLoading}
+              />
+            </div>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <Separator className="w-full" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-gray-500">
+                  Or sign up with email
+                </span>
+              </div>
+            </div>
+
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <FormField
@@ -119,7 +163,12 @@ export default function RegisterPage() {
                       <FormControl>
                         <div className="relative">
                           <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input placeholder="Choose a username" className="pl-10" {...field} />
+                          <Input 
+                            placeholder="Choose a username" 
+                            className="pl-10" 
+                            {...field} 
+                            disabled={isLoading || isGoogleLoading}
+                          />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -136,7 +185,13 @@ export default function RegisterPage() {
                       <FormControl>
                         <div className="relative">
                           <Mail className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input placeholder="Enter your email" className="pl-10" {...field} type="email" />
+                          <Input 
+                            placeholder="Enter your email" 
+                            className="pl-10" 
+                            {...field} 
+                            type="email" 
+                            disabled={isLoading || isGoogleLoading}
+                          />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -153,7 +208,13 @@ export default function RegisterPage() {
                       <FormControl>
                         <div className="relative">
                           <KeyRound className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input placeholder="Create a password" className="pl-10" {...field} type="password" />
+                          <Input 
+                            placeholder="Create a password" 
+                            className="pl-10" 
+                            {...field} 
+                            type="password" 
+                            disabled={isLoading || isGoogleLoading}
+                          />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -170,7 +231,12 @@ export default function RegisterPage() {
                       <FormControl>
                         <div className="relative">    
                           <AtSign className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
-                          <Input placeholder="Enter referral code" className="pl-10" {...field} />
+                          <Input 
+                            placeholder="Enter referral code" 
+                            className="pl-10" 
+                            {...field} 
+                            disabled={isLoading || isGoogleLoading}
+                          />
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -191,7 +257,7 @@ export default function RegisterPage() {
                 <Button 
                   type="submit" 
                   className="w-full mt-6" 
-                  disabled={isLoading}
+                  disabled={isLoading || isGoogleLoading}
                   size="lg"
                 >
                   {isLoading ? (
