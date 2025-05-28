@@ -1,4 +1,4 @@
-;// pages/articles/ArticlesListPage.tsx
+// pages/articles/ArticlesListPage.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -483,6 +483,7 @@ return (
             likedArticles={likedArticles}
             setBookmarkedArticles={setBookmarkedArticles}
             setLikedArticles={setLikedArticles}
+            onArticleClick={handleArticleClick}
             emptyMessage={
               activeTab === 'bookmarked' 
                 ? "You haven't bookmarked any articles yet" 

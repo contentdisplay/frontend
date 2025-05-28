@@ -1,3 +1,4 @@
+// dashboardService.ts
 import api from './api';
 
 export interface Offer {
@@ -55,63 +56,63 @@ export interface TopTransaction {
 export interface ClaimResponse {
   message: string;
   reward_amount: number;
-  new_balance: number;
+  new_reward_points: number;
   offer_title: string;
+  next_claim_available: string;
 }
 
 const dashboardService = {
   getActiveOffers: async (): Promise<Offer[]> => {
     try {
       const response = await api.get('/dashboard/offers/');
-      return response.data;
+      return response.data.results || response.data; // Handle paginated or non-paginated response
     } catch (error) {
       console.error('Failed to fetch offers:', error);
-      return [];
+      throw new Error('Failed to load active offers');
     }
   },
 
   getActivePromotions: async (): Promise<Promotion[]> => {
     try {
       const response = await api.get('/dashboard/promotions/');
-      return response.data;
+      return response.data.results || response.data;
     } catch (error) {
       console.error('Failed to fetch promotions:', error);
-      return [];
+      throw new Error('Failed to load promotions');
     }
   },
 
   getTopRewardEarners: async (): Promise<TopRewardEarner[]> => {
     try {
       const response = await api.get('/dashboard/top-reward-earners/');
-      return response.data;
+      return response.data.results || response.data;
     } catch (error) {
       console.error('Failed to fetch top reward earners:', error);
-      return [];
+      throw new Error('Failed to load top reward earners');
     }
   },
 
   getTopTransactions: async (): Promise<TopTransaction[]> => {
     try {
       const response = await api.get('/dashboard/top-transactions/');
-      return response.data;
+      return response.data.results || response.data;
     } catch (error) {
       console.error('Failed to fetch top transactions:', error);
-      return [];
+      throw new Error('Failed to load top transactions');
     }
   },
 
-  // In dashboardService.ts, update the claimOffer method:
-claimOffer: async (offerId: string): Promise<ClaimResponse> => {
-  try {
-    const response = await api.post(`/dashboard/offers/${offerId}/claim/`);
-    return response.data;
-  } catch (error: any) {
-    if (error.response?.data?.error) {
-      throw new Error(error.response.data.error);
+  claimOffer: async (offerId: string): Promise<ClaimResponse> => {
+    try {
+      const response = await api.post(`/dashboard/offers/${offerId}/claim/`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data?.error) {
+        throw new Error(error.response.data.error);
+      }
+      throw new Error('Failed to claim offer. Please try again.');
     }
-    throw new Error('Failed to claim offer. Please try again.');
-  }
-},
+  },
 };
 
 export default dashboardService;

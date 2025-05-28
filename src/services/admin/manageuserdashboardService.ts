@@ -1,4 +1,4 @@
-// services/admin/adminDashboardService.ts
+// services/admin/manageuserdashboardService.ts
 import api from '../api';
 import { 
   Offer, 
@@ -9,8 +9,7 @@ import {
 
 const manageuserdashboardService = {
   // Offers CRUD
-// In adminDashboardService.ts
-getOffers: async (): Promise<Offer[]> => {
+  getOffers: async (): Promise<Offer[]> => {
     try {
       const response = await api.get('/dashboard/offer/');
       
@@ -27,6 +26,11 @@ getOffers: async (): Promise<Offer[]> => {
       return [];
     } catch (error) {
       console.error('Failed to fetch offers:', error);
+      // Log more detailed error information
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+        console.error('Error status:', error.response.status);
+      }
       return [];
     }
   },
@@ -43,21 +47,48 @@ getOffers: async (): Promise<Offer[]> => {
 
   createOffer: async (offer: Omit<Offer, 'id'>): Promise<Offer | null> => {
     try {
-      const response = await api.post('/dashboard/offer/', offer);
+      // Prepare the data with proper formatting
+      const offerData = {
+        title: offer.title || '',
+        description: offer.description || '',
+        image: offer.image || '',
+        reward_amount: Number(offer.reward_amount) || 0,
+        redemption_link: offer.redemption_link || '',
+        redemption_code: offer.redemption_code || '',
+        expires_at: offer.expires_at,
+        is_active: Boolean(offer.is_active)
+      };
+
+      console.log('Creating offer with data:', offerData);
+      const response = await api.post('/dashboard/offer/', offerData);
       return response.data;
     } catch (error) {
       console.error('Failed to create offer:', error);
-      return null;
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+        console.error('Error status:', error.response.status);
+      }
+      throw error; // Re-throw to allow component to handle
     }
   },
 
   updateOffer: async (id: string, offer: Partial<Offer>): Promise<Offer | null> => {
     try {
-      const response = await api.put(`/dashboard/offers/${id}/`, offer);
+      // Prepare the data with proper formatting
+      const offerData = {
+        ...offer,
+        reward_amount: offer.reward_amount ? Number(offer.reward_amount) : undefined,
+        is_active: offer.is_active !== undefined ? Boolean(offer.is_active) : undefined
+      };
+
+      const response = await api.put(`/dashboard/offers/${id}/`, offerData);
       return response.data;
     } catch (error) {
       console.error('Failed to update offer:', error);
-      return null;
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+      }
+      throw error;
     }
   },
 
@@ -67,7 +98,7 @@ getOffers: async (): Promise<Offer[]> => {
       return true;
     } catch (error) {
       console.error('Failed to delete offer:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -80,13 +111,15 @@ getOffers: async (): Promise<Offer[]> => {
       } else if (response.data && Array.isArray(response.data.results)) {
         return response.data.results;
       } else if (response.data && typeof response.data === 'object') {
-        // Handle case where response might be a single object
         return [response.data];
       }
-      // Return empty array as fallback
       return [];
     } catch (error) {
       console.error('Failed to fetch promotions:', error);
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+        console.error('Error status:', error.response.status);
+      }
       return [];
     }
   },
@@ -103,21 +136,48 @@ getOffers: async (): Promise<Offer[]> => {
 
   createPromotion: async (promotion: Omit<Promotion, 'id'>): Promise<Promotion | null> => {
     try {
-      const response = await api.post('/dashboard/promotion/', promotion);
+      // Prepare the data with proper formatting
+      const promotionData = {
+        title: promotion.title || '',
+        description: promotion.description || '',
+        image: promotion.image || '',
+        link: promotion.link || '',
+        start_date: promotion.start_date,
+        end_date: promotion.end_date,
+        priority: Number(promotion.priority) || 0,
+        is_active: Boolean(promotion.is_active)
+      };
+
+      console.log('Creating promotion with data:', promotionData);
+      const response = await api.post('/dashboard/promotion/', promotionData);
       return response.data;
     } catch (error) {
       console.error('Failed to create promotion:', error);
-      return null;
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+        console.error('Error status:', error.response.status);
+      }
+      throw error;
     }
   },
 
   updatePromotion: async (id: string, promotion: Partial<Promotion>): Promise<Promotion | null> => {
     try {
-      const response = await api.put(`/dashboard/promotions/${id}/`, promotion);
+      // Prepare the data with proper formatting
+      const promotionData = {
+        ...promotion,
+        priority: promotion.priority ? Number(promotion.priority) : undefined,
+        is_active: promotion.is_active !== undefined ? Boolean(promotion.is_active) : undefined
+      };
+
+      const response = await api.put(`/dashboard/promotions/${id}/`, promotionData);
       return response.data;
     } catch (error) {
       console.error('Failed to update promotion:', error);
-      return null;
+      if (error.response) {
+        console.error('Error response:', error.response.data);
+      }
+      throw error;
     }
   },
 
@@ -127,7 +187,7 @@ getOffers: async (): Promise<Offer[]> => {
       return true;
     } catch (error) {
       console.error('Failed to delete promotion:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -140,10 +200,8 @@ getOffers: async (): Promise<Offer[]> => {
       } else if (response.data && Array.isArray(response.data.results)) {
         return response.data.results;
       } else if (response.data && typeof response.data === 'object') {
-        // Handle case where response might be a single object
         return [response.data];
       }
-      // Return empty array as fallback
       return [];
     } catch (error) {
       console.error('Failed to fetch top reward earners:', error);
@@ -163,21 +221,37 @@ getOffers: async (): Promise<Offer[]> => {
 
   createTopRewardEarner: async (earner: Omit<TopRewardEarner, 'id'>): Promise<TopRewardEarner | null> => {
     try {
-      const response = await api.post('/dashboard/top-reward-earner/', earner);
+      // Prepare the data with proper formatting
+      const earnerData = {
+        full_name: earner.full_name || '',
+        username: earner.username || '',
+        date: earner.date,
+        total_rewards: Number(earner.total_rewards) || 0,
+        rank: Number(earner.rank) || 1
+      };
+
+      const response = await api.post('/dashboard/top-reward-earner/', earnerData);
       return response.data;
     } catch (error) {
       console.error('Failed to create top reward earner:', error);
-      return null;
+      throw error;
     }
   },
 
   updateTopRewardEarner: async (id: string, earner: Partial<TopRewardEarner>): Promise<TopRewardEarner | null> => {
     try {
-      const response = await api.put(`/dashboard/top-reward-earners/${id}/`, earner);
+      // Prepare the data with proper formatting
+      const earnerData = {
+        ...earner,
+        total_rewards: earner.total_rewards ? Number(earner.total_rewards) : undefined,
+        rank: earner.rank ? Number(earner.rank) : undefined
+      };
+
+      const response = await api.put(`/dashboard/top-reward-earners/${id}/`, earnerData);
       return response.data;
     } catch (error) {
       console.error('Failed to update top reward earner:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -187,7 +261,7 @@ getOffers: async (): Promise<Offer[]> => {
       return true;
     } catch (error) {
       console.error('Failed to delete top reward earner:', error);
-      return false;
+      throw error;
     }
   },
 
@@ -200,10 +274,8 @@ getOffers: async (): Promise<Offer[]> => {
       } else if (response.data && Array.isArray(response.data.results)) {
         return response.data.results;
       } else if (response.data && typeof response.data === 'object') {
-        // Handle case where response might be a single object
         return [response.data];
       }
-      // Return empty array as fallback
       return [];
     } catch (error) {
       console.error('Failed to fetch top transactions:', error);
@@ -223,21 +295,43 @@ getOffers: async (): Promise<Offer[]> => {
 
   createTopTransaction: async (transaction: Omit<TopTransaction, 'id'>): Promise<TopTransaction | null> => {
     try {
-      const response = await api.post('/dashboard/top-transaction/', transaction);
+      // Prepare the data with proper formatting
+      const transactionData = {
+        full_name: transaction.full_name || '',
+        username: transaction.username || '',
+        transaction_id: transaction.transaction_id || '',
+        transaction_date: transaction.transaction_date,
+        total_amount: Number(transaction.total_amount) || 0,
+        amount_earned: Number(transaction.amount_earned) || 0,
+        amount_spent: Number(transaction.amount_spent) || 0,
+        amount_withdrawn: Number(transaction.amount_withdrawn) || 0,
+        notes: transaction.notes || ''
+      };
+
+      const response = await api.post('/dashboard/top-transaction/', transactionData);
       return response.data;
     } catch (error) {
       console.error('Failed to create top transaction:', error);
-      return null;
+      throw error;
     }
   },
 
   updateTopTransaction: async (id: string, transaction: Partial<TopTransaction>): Promise<TopTransaction | null> => {
     try {
-      const response = await api.put(`/dashboard/top-transactions/${id}/`, transaction);
+      // Prepare the data with proper formatting
+      const transactionData = {
+        ...transaction,
+        total_amount: transaction.total_amount ? Number(transaction.total_amount) : undefined,
+        amount_earned: transaction.amount_earned ? Number(transaction.amount_earned) : undefined,
+        amount_spent: transaction.amount_spent ? Number(transaction.amount_spent) : undefined,
+        amount_withdrawn: transaction.amount_withdrawn ? Number(transaction.amount_withdrawn) : undefined
+      };
+
+      const response = await api.put(`/dashboard/top-transactions/${id}/`, transactionData);
       return response.data;
     } catch (error) {
       console.error('Failed to update top transaction:', error);
-      return null;
+      throw error;
     }
   },
 
@@ -247,7 +341,7 @@ getOffers: async (): Promise<Offer[]> => {
       return true;
     } catch (error) {
       console.error('Failed to delete top transaction:', error);
-      return false;
+      throw error;
     }
   },
 };

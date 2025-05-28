@@ -27,6 +27,8 @@ import {
   Bookmark,
   ArrowUp,
   ArrowDown,
+  CheckCircle,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
@@ -70,6 +72,7 @@ export default function UserDashboard() {
   const [promotions, setPromotions] = useState([]);
   const [topEarners, setTopEarners] = useState([]);
   const [topTransactions, setTopTransactions] = useState([]);
+  const [claimingOffer, setClaimingOffer] = useState(null);
   const [loading, setLoading] = useState({
     offers: true,
     promotions: true,
@@ -150,6 +153,43 @@ export default function UserDashboard() {
     } finally {
       setLoading((prev) => ({ ...prev, transactions: false }));
     }
+  };
+
+  // Handle claim offer
+  const handleClaimOffer = async (offer) => {
+    setClaimingOffer(offer.id);
+    try {
+      const response = await dashboardService.claimOffer(offer.id);
+      
+      // Show success message
+      toast.success(response.message, {
+        description: `You earned ${response.reward_amount} points!`,
+        duration: 5000,
+      });
+
+      // Play success sound
+      playSound("earn");
+
+      // Refresh offers to get updated claim status
+      await fetchOffers();
+
+    } catch (error) {
+      console.error("Failed to claim offer:", error);
+      toast.error(error.message || "Failed to claim offer");
+    } finally {
+      setClaimingOffer(null);
+    }
+  };
+
+  // Check if user can claim offers (no offer claimed today)
+  const canClaimOffers = () => {
+    return !offers.some(offer => offer.is_claimed_today);
+  };
+
+  // Get the offer that was claimed today (if any)
+  const getClaimedOfferToday = () => {
+    const claimedOffer = offers.find(offer => offer.is_claimed_today);
+    return claimedOffer?.claimed_offer_today || null;
   };
 
   // Format currency
@@ -237,6 +277,26 @@ export default function UserDashboard() {
           )}
         </Button>
       </div>
+
+      {/* Daily Claim Status Banner */}
+      {!canClaimOffers() && (
+        <Card className="border-l-4 border-l-green-500 bg-green-50 dark:bg-green-900/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center space-x-3">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+              <div>
+                <h3 className="font-semibold text-green-800 dark:text-green-200">
+                  Daily Reward Claimed!
+                </h3>
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  You've already claimed your daily reward from "{getClaimedOfferToday()?.title}". 
+                  Come back tomorrow for more rewards!
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main Tabs Section - Working Responsive Version */}
       <Tabs
@@ -353,7 +413,7 @@ export default function UserDashboard() {
                 Special Offers
               </CardTitle>
               <CardDescription>
-                Limited-time opportunities to maximize your rewards
+                Limited-time opportunities to maximize your rewards {!canClaimOffers() && "(Daily limit reached)"}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
@@ -465,16 +525,46 @@ export default function UserDashboard() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-center">
-                              <Button
-                                className="bg-blue-600 hover:bg-blue-700"
-                                size="sm"
-                                onClick={() => {
-                                  playSound("earn");
-                                  window.open(offer.redemption_link, "_blank");
-                                }}
-                              >
-                                Claim
-                              </Button>
+                              <div className="flex space-x-2 justify-center">
+                                <Button
+                                  className={`${
+                                    canClaimOffers()
+                                      ? "bg-green-600 hover:bg-green-700"
+                                      : "bg-gray-400 cursor-not-allowed"
+                                  }`}
+                                  size="sm"
+                                  disabled={!canClaimOffers() || claimingOffer === offer.id}
+                                  onClick={() => handleClaimOffer(offer)}
+                                >
+                                  {claimingOffer === offer.id ? (
+                                    <div className="flex items-center space-x-2">
+                                      <div className="animate-spin rounded-full h-3 w-3 border-t-2 border-b-2 border-white"></div>
+                                      <span>Claiming...</span>
+                                    </div>
+                                  ) : canClaimOffers() ? (
+                                    <>
+                                      <Gift className="h-3 w-3 mr-1" />
+                                      Claim Reward
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Claimed Today
+                                    </>
+                                  )}
+                                </Button>
+                                
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    playSound("click");
+                                    window.open(offer.redemption_link, "_blank");
+                                  }}
+                                >
+                                  View Details
+                                </Button>
+                              </div>
                             </TableCell>
                           </motion.tr>
                         ))}
@@ -490,7 +580,11 @@ export default function UserDashboard() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
-                        className="bg-white dark:bg-gray-800 rounded-lg border border-blue-200 shadow-sm p-4 space-y-3"
+                        className={`bg-white dark:bg-gray-800 rounded-lg border shadow-sm p-4 space-y-3 ${
+                          !canClaimOffers()
+                            ? "border-gray-300 opacity-75"
+                            : "border-blue-200"
+                        }`}
                         onTouchStart={() => playSound("hover")}
                       >
                         {/* Header with Title and Reward */}
@@ -513,6 +607,16 @@ export default function UserDashboard() {
                           </div>
                         </div>
 
+                        {/* Claim Status Indicator */}
+                        {!canClaimOffers() && (
+                          <div className="flex items-center space-x-2 bg-green-50 dark:bg-green-900/20 p-2 rounded-md">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <span className="text-sm text-green-700 dark:text-green-300">
+                              Daily reward already claimed
+                            </span>
+                          </div>
+                        )}
+
                         {/* Expiry Date */}
                         <div className="flex items-center space-x-2">
                           <Calendar className="h-4 w-4 text-gray-400" />
@@ -533,15 +637,32 @@ export default function UserDashboard() {
                         {/* Action Buttons */}
                         <div className="flex space-x-2 pt-2">
                           <Button
-                            className="flex-1 bg-blue-600 hover:bg-blue-700 h-10"
-                            onClick={() => {
-                              playSound("earn");
-                              window.open(offer.redemption_link, "_blank");
-                            }}
+                            className={`flex-1 h-10 ${
+                              canClaimOffers()
+                                ? "bg-green-600 hover:bg-green-700"
+                                : "bg-gray-400 cursor-not-allowed"
+                            }`}
+                            disabled={!canClaimOffers() || claimingOffer === offer.id}
+                            onClick={() => handleClaimOffer(offer)}
                           >
-                            <Gift className="h-4 w-4 mr-2" />
-                            Claim Offer
+                            {claimingOffer === offer.id ? (
+                              <div className="flex items-center space-x-2">
+                                <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white"></div>
+                                <span>Claiming...</span>
+                              </div>
+                            ) : canClaimOffers() ? (
+                              <>
+                                <Gift className="h-4 w-4 mr-2" />
+                                Claim Reward
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="h-4 w-4 mr-2" />
+                                Claimed Today
+                              </>
+                            )}
                           </Button>
+                          
                           <Button
                             variant="outline"
                             size="icon"
@@ -549,6 +670,15 @@ export default function UserDashboard() {
                             onClick={() => window.open(offer.image, "_blank")}
                           >
                             <FileText className="h-4 w-4 text-blue-500" />
+                          </Button>
+                          
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-10 w-10 border-blue-200"
+                            onClick={() => window.open(offer.redemption_link, "_blank")}
+                          >
+                            <LinkIcon className="h-4 w-4 text-blue-500" />
                           </Button>
                         </div>
                       </motion.div>
@@ -654,7 +784,7 @@ export default function UserDashboard() {
                                   </TooltipTrigger>
                                   <TooltipContent>View Image</TooltipContent>
                                 </Tooltip>
-                              </TooltipProvider>
+                                </TooltipProvider>
                             </TableCell>
                             <TableCell className="text-center">
                               <TooltipProvider>
@@ -789,7 +919,7 @@ export default function UserDashboard() {
                                 : "bg-gray-400"
                             }`}
                             style={{
-                              width: promotion.is_active ? "60%" : "100%", // You can calculate actual progress based on dates
+                              width: promotion.is_active ? "60%" : "100%",
                             }}
                           ></div>
                         </div>
@@ -1315,7 +1445,7 @@ export default function UserDashboard() {
 
         {/* Top Earner Distribution */}
         <Card className="border shadow-md">
-          <CardHeader className="bg-gradient-to-r from-purple-50 to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30">
+          <CardHeader className="bg-gradient-to-r from-purple-50to-violet-50 dark:from-purple-900/30 dark:to-violet-900/30">
             <CardTitle className="flex items-center text-lg">
               <Award className="mr-2 h-5 w-5 text-purple-600" />
               Reward Distribution
